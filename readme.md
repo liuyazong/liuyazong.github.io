@@ -1,1 +1,1 @@
-1. [Java CAS & AQS](https://liuyazong.github.io/java-cas-aqs/)
+1. [Java CAS & AQS](https://liuyazong.github.io/java-cas-aqs)
