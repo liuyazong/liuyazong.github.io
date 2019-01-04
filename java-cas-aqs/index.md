@@ -1,3 +1,8 @@
+---
+layout: post
+title: CAS & AQS
+---
+
 本文介绍两方面的知识：
 * cas: compare and swap
 * aqs: AbstractQueuedSynchronizer
