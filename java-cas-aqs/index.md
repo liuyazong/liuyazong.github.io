@@ -11,6 +11,7 @@ cas是 compare and swap的缩写，由Unsafe类调用native方法实现。cas由
 
 以下仅列出关于cas的方法。
 
+```java
     //获取实例属性相对于持有它的对象的地址偏移量
     public native long objectFieldOffset(Field var1);
     //获取类属性相对于持有它的对象的地址偏移量
@@ -34,11 +35,13 @@ cas是 compare and swap的缩写，由Unsafe类调用native方法实现。cas由
     public final native boolean compareAndSwapInt(Object var1, long var2, int var4, int var5);
     //操作long类型
     public final native boolean compareAndSwapLong(Object var1, long var2, long var4, long var6);
+```
 
 它还有putXXX的一些方法，这里不再列出。
 
 Unsafe类还实现了一些循环cas的方法，这些方法使用cas保证对变量的更新是线程安全的。
 
+```java
     public final int getAndAddInt(Object var1, long var2, int var4) {
         int var5;
         do {
@@ -83,11 +86,13 @@ Unsafe类还实现了一些循环cas的方法，这些方法使用cas保证对�
 
         return var5;
     }
+```
 
 ## Unsafe类实例
 
 一个完整的计数器实例，使用Unsafe类的cas方法实现了线程安全的递增操作。
 
+```java
     public static class Counter {
         private volatile int value;
         private Unsafe unsafe;
@@ -109,16 +114,21 @@ Unsafe类还实现了一些循环cas的方法，这些方法使用cas保证对�
             } while (!unsafe.compareAndSwapInt(this, valueOffset, t, t + 1));
             return t;
         }
-    }    
+    } 
+```
+   
 
 事实上，实例中的increment方法在Unsafe类中已经有实现了，它等同于
 
+```java
     public int increment() {
         return unsafe.getAndAddInt(this, valueOffset, 1);
     }
+```
     
 单元测试，可以看到最终打印结果为320
 
+```java
     @Test
     public void testCounter() throws Exception {
         ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() << 1);
@@ -136,6 +146,7 @@ Unsafe类还实现了一些循环cas的方法，这些方法使用cas保证对�
 
         log.info("最终值：{}", counter.value);
     }
+```
 
 以上就是cas操作的简单介绍。
 下文开始介绍aqs相关知识。
