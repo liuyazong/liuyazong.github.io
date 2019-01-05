@@ -3,22 +3,22 @@ layout: post
 title: CAS & AQS
 date: 2019-01-04
 author: yz
-tags: java,cas,aqs
-categories: java,cas,aqs
+tags: java, CAS, AQS
+categories: java, CAS, AQS
 ---
 
 本文介绍两方面的知识：
-* cas: compare and swap
-* aqs: AbstractQueuedSynchronizer
-# cas
+* CAS: compare and swap
+* AQS: AbstractQueuedSynchronizer
+# CAS
 
-cas是 compare and swap的缩写，由Unsafe类调用native方法实现。cas由cpu指令支持，是一个原子操作。
+CAS是compare and swap的缩写，由Unsafe类调用native方法实现。CAS由cpu指令支持，是一个原子操作。
 
 代码实例基于Java 8。
 
 ## Unsafe类api
 
-以下仅列出关于cas的方法。
+以下仅列出关于CAS的方法。
 
 ```java
     //获取实例属性相对于持有它的对象的地址偏移量
@@ -48,7 +48,7 @@ cas是 compare and swap的缩写，由Unsafe类调用native方法实现。cas由
 
 它还有putXXX的一些方法，这里不再列出。
 
-Unsafe类还实现了一些循环cas的方法，这些方法使用cas保证对变量的更新是线程安全的。
+Unsafe类还实现了一些循环cas的方法，这些方法使用CAS保证对变量的更新是线程安全的。
 
 ```java
     public final int getAndAddInt(Object var1, long var2, int var4) {
@@ -99,7 +99,7 @@ Unsafe类还实现了一些循环cas的方法，这些方法使用cas保证对�
 
 ## Unsafe类实例
 
-一个完整的计数器实例，使用Unsafe类的cas方法实现了线程安全的递增操作。
+一个完整的计数器实例，使用Unsafe类的CAS方法实现了线程安全的递增操作。
 
 ```java
     public static class Counter {
@@ -156,8 +156,203 @@ Unsafe类还实现了一些循环cas的方法，这些方法使用cas保证对�
         log.info("最终值：{}", counter.value);
     }
 ```
+## ABA问题
 
-以上就是cas操作的简单介绍。
-下文开始介绍aqs相关知识。
+说到CAS就不得不提的ABA问题。
 
-# aqs
+假设变量的初始值是m。
+2. 线程2取到值为A
+3. 线程3取到值为A
+4. 线程2把值更新为B
+5. 线程1取到值为B并把值更新为A
+6. 线程3把值更新为X
+
+尽管线程1、2已经对变量值进行了更新，即A-->B-->A的变化，但是3并没有感知到这个值被其他线程修改，所以线程3依然能够更新成功。
+
+这就是所谓的ABA问题。
+
+以下程序模拟了一个ABA问题发生的过程。程序中的value值经历了1-->2-->1-->3的过程。
+
+```java
+    @Slf4j
+    public class ABATest {
+    
+        private volatile int value;
+        private Unsafe unsafe;
+        private long valueOffset;
+    
+        ABATest(int value) throws Exception {
+            this.value = value;
+            Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+            Field theUnsafeField = unsafeClass.getDeclaredField("theUnsafe");
+            theUnsafeField.setAccessible(true);
+            unsafe = (Unsafe) theUnsafeField.get(null);
+            valueOffset = unsafe.objectFieldOffset(UnsafeTest.Counter.class.getDeclaredField("value"));
+        }
+    
+        public static void main(String[] args) throws Exception {
+            ////为了模拟ABA问题，使用CountDownLatch变量保证线程1、2、3执行CAS的顺序
+            CountDownLatch countDownLatch1 = new CountDownLatch(1);
+            CountDownLatch countDownLatch2 = new CountDownLatch(1);
+            CountDownLatch countDownLatch3 = new CountDownLatch(1);
+    
+            ABATest abaTest = new ABATest(1);
+            Thread thread2 = new Thread(() -> {
+                int v = abaTest.unsafe.getIntVolatile(abaTest, abaTest.valueOffset);
+                try {
+                    countDownLatch1.await();
+                } catch (InterruptedException e) {
+                }
+                boolean b = abaTest.unsafe.compareAndSwapInt(abaTest, abaTest.valueOffset, v, 2);
+                log.info("update: {}, value: {}, {}", b, v, 2);
+                countDownLatch3.countDown();
+            });
+            Thread thread1 = new Thread(() -> {
+                try {
+                    countDownLatch3.await();
+                } catch (InterruptedException e) {
+                }
+                int v = abaTest.unsafe.getIntVolatile(abaTest, abaTest.valueOffset);
+                boolean b = abaTest.unsafe.compareAndSwapInt(abaTest, abaTest.valueOffset, v, 1);
+                log.info("update: {}, value: {}, {}", b, v, 1);
+                countDownLatch2.countDown();
+            });
+            Thread thread3 = new Thread(() -> {
+                int v = abaTest.unsafe.getIntVolatile(abaTest, abaTest.valueOffset);
+                countDownLatch1.countDown();
+                try {
+                    countDownLatch2.await();
+                } catch (InterruptedException e) {
+                }
+                boolean b = abaTest.unsafe.compareAndSwapInt(abaTest, abaTest.valueOffset, v, 3);
+                log.info("update: {}, value: {}, {}", b, v, 3);
+            });
+    
+            thread1.start();
+            thread2.start();
+            thread3.start();
+        }
+    }   
+```
+
+为了解决这个问题，JKD为我们提供了AtomicMarkableReference、AtomicStampedReference
+
+先来看看AtomicStampedReference的用法。以下代码片段还是实现的int变量的递增操作。
+
+```java
+    AtomicStampedReference<Integer> atomicStampedReference = new AtomicStampedReference<>(0, 0);
+    int nThreads = Runtime.getRuntime().availableProcessors() << 1;
+    ExecutorService executorService = Executors.newFixedThreadPool(nThreads);
+    for (int i = 0; i < 320; i++) {
+        executorService.execute(() -> {
+            int stamp;
+            Integer reference;
+            do {
+                stamp = atomicStampedReference.getStamp();
+                reference = atomicStampedReference.getReference();
+            } while (!atomicStampedReference.compareAndSet(reference, reference + 1, stamp, stamp + 1));
+            log.info("value: {} --->> {}, stamp: {} --->> {}", reference, atomicStampedReference.getReference(), stamp, atomicStampedReference.getStamp());
+        });
+    }
+    executorService.shutdown();
+    do {
+        log.debug("等待任务全部执行");
+    } while (!executorService.awaitTermination(2, TimeUnit.SECONDS));
+    log.info("最终结果：value：{}，stamp：{}", atomicStampedReference.getReference(), atomicStampedReference.getStamp());
+```
+那它是怎么解决ABA问题的？首先来看AtomicStampedReference内部定义的Pair类，如下，它有两个成员，reference代表对象引用，stamp代表对象版本。
+
+```java
+    private static class Pair<T> {
+        final T reference;
+        final int stamp;
+        private Pair(T reference, int stamp) {
+            this.reference = reference;
+            this.stamp = stamp;
+        }
+        static <T> Pair<T> of(T reference, int stamp) {
+            return new Pair<T>(reference, stamp);
+        }
+    }
+```
+
+再看compareAndSet方法的实现，它表明，只有期望引用与当前引用相同、期望版本与当前版本相同、新的引用与当前引用引用不同、新的版本与当前版本不同时，才会执行CAS操作。
+
+1. 期望引用与当前引用不同`or`期望版本与当前版本不同时，说明它已经被更新过了，不能执行CAS操作，返回。
+2. 新的引用与当前引用相同`and`新的版本与当前版本相同时，说明它已经是最新的了，不需要执行CAS操作，返回。
+3. 1、2
+都未短路，则继续执行CAS操作。
+
+```java
+    public boolean compareAndSet(V   expectedReference,
+                                 V   newReference,
+                                 int expectedStamp,
+                                 int newStamp) {
+        Pair<V> current = pair;
+        return
+            expectedReference == current.reference &&
+            expectedStamp == current.stamp &&
+            ((newReference == current.reference &&
+              newStamp == current.stamp) ||
+             casPair(current, Pair.of(newReference, newStamp)));
+    }
+    
+    private boolean casPair(Pair<V> cmp, Pair<V> val) {
+        return UNSAFE.compareAndSwapObject(this, pairOffset, cmp, val);
+    }
+```
+
+怎么用AtomicStampedReference来解决上面示例程序的ABA问题？如下代码所示，线程3的cas是不会成功的，也就是说，线程3通过stamp值已经能够感知到变量的变化了。
+
+```java
+    //为了模拟ABA问题，使用CountDownLatch变量保证线程1、2、3执行CAS的顺序
+    CountDownLatch countDownLatch1 = new CountDownLatch(1);
+    CountDownLatch countDownLatch2 = new CountDownLatch(1);
+    CountDownLatch countDownLatch3 = new CountDownLatch(1);
+    AtomicStampedReference<Integer> atomicStampedReference = new AtomicStampedReference<>(1, 0);
+
+    Thread thread2 = new Thread(() -> {
+        Integer v = atomicStampedReference.getReference();
+        int stamp = atomicStampedReference.getStamp();
+        try {
+            countDownLatch1.await();
+        } catch (InterruptedException e) {
+        }
+        boolean b = atomicStampedReference.compareAndSet(v, 2, stamp, stamp + 1);
+        log.info("update: {}, value: {}, {}", b, v, 2);
+        countDownLatch3.countDown();
+    });
+    Thread thread1 = new Thread(() -> {
+        try {
+            countDownLatch3.await();
+        } catch (InterruptedException e) {
+        }
+        Integer v = atomicStampedReference.getReference();
+        int stamp = atomicStampedReference.getStamp();
+        boolean b = atomicStampedReference.compareAndSet(v, 1, stamp, stamp + 1);
+        log.info("update: {}, value: {}, {}", b, v, 1);
+        countDownLatch2.countDown();
+    });
+    Thread thread3 = new Thread(() -> {
+        Integer v = atomicStampedReference.getReference();
+        int stamp = atomicStampedReference.getStamp();
+        countDownLatch1.countDown();
+        try {
+            countDownLatch2.await();
+        } catch (InterruptedException e) {
+        }
+        boolean b = atomicStampedReference.compareAndSet(v, 3, stamp, stamp + 1);
+        log.info("update: {}, value: {}, {}", b, v, 3);
+    });
+
+    thread1.start();
+    thread2.start();
+    thread3.start();
+```
+
+AtomicMarkableReference与之类似，不BB它了。
+
+以上就是CAS操作的简单介绍。
+下文开始介绍AQS相关知识。
+
+# AQS
