@@ -302,7 +302,7 @@ Unsafe类还实现了一些循环cas的方法，这些方法使用CAS保证对�
     }
 ```
 
-怎么用AtomicStampedReference来解决上面示例程序的ABA问题？如下代码所示，线程3的cas是不会成功的，也就是说，线程3通过stamp值已经能够感知到变量的变化了。
+怎么用AtomicStampedReference来解决上面示例程序的ABA问题？如下代码所示，线程3的CAS是不会成功的，也就是说，线程3通过stamp值已经能够感知到变量的变化了。
 
 ```java
     //为了模拟ABA问题，使用CountDownLatch变量保证线程1、2、3执行CAS的顺序
