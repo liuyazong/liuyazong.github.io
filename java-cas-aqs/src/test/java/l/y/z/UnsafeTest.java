@@ -15,7 +15,6 @@ import java.util.concurrent.TimeUnit;
 public class UnsafeTest {
 
 
-
     @Test
     public void testCounter() throws Exception {
         ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() << 1);
