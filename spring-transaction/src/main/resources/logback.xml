@@ -3,7 +3,7 @@
     <property name="log_path" value="."/>
     <property name="app" value="lyz"/>
     <property name="pattern"
-              value="%boldMagenta(%date{yyyy-MM-dd HH:mm:ss}) | %boldYellow(%5level) | %boldGreen(%32.32logger{30}) - %boldWhite(%message%n)"/>
+              value="%boldMagenta(%date{yyyy-MM-dd HH:mm:ss}) | %boldYellow(%5level) | %boldGreen(%64.64logger{63}) - %boldWhite(%message%n)"/>
     <!--value="%boldMagenta(%date{yyyy-MM-dd HH:mm:ss.SSS}) | %boldBlue(%16.16thread{15}) | %boldYellow(%5level) | %boldGreen(%32.32logger{30}) - %boldWhite(%message%n)"/>-->
     <contextName>${app}</contextName>
 
@@ -28,11 +28,11 @@
 
 
     <logger name="l.y.z" level="DEBUG"/>
-    <logger name="org.springframework.transaction" level="DEBUG"/>
-    <logger name="org.springframework.jdbc" level="DEBUG"/>
+    <logger name="org.springframework.transaction" level="TRACE"/>
+    <logger name="org.springframework.jdbc" level="TRACE"/>
     <logger name="org.springframework" level="ERROR"/>
-    <logger name="org.mybatis.spring" level="DEBUG"/>
-    <logger name="org.apache.ibatis" level="DEBUG"/>
+    <logger name="org.mybatis.spring" level="ERROR"/>
+    <logger name="org.apache.ibatis" level="ERROR"/>
 
 
     <root level="INFO">

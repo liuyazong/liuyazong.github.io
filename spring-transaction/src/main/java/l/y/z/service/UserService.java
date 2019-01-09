@@ -15,16 +15,7 @@ public class UserService {
 
     @Transactional
     public void test() {
-        User user = new User();
-        user.setMobile("1111111111");
-        user.setPassword("1");
-        user.setSalt("1");
-        Integer insert = userDao.insert(user);
-        if (1 != insert) {
-            user = userDao.selectByMobile(user.getMobile());
-        } else {
-            user = userDao.select(1);
-        }
+        User user = userDao.select(1);
         log.info("user: {}", user);
     }
 
