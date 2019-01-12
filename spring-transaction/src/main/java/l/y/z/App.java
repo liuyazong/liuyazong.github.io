@@ -15,9 +15,9 @@ public class App {
     public static void main(String[] args) {
         ConfigurableApplicationContext applicationContext = SpringApplication.run(App.class, args);
 
-        String[] beanDefinitionNames = applicationContext.getBeanDefinitionNames();
+        /*String[] beanDefinitionNames = applicationContext.getBeanDefinitionNames();
         for(String beanName: beanDefinitionNames){
             log.info("{}--->>{}",beanName,applicationContext.getBean(beanName).getClass());
-        }
+        }*/
     }
 }

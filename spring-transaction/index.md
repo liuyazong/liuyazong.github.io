@@ -1,3 +1,9 @@
+# SpringBoot 事务
+
+## 组件扫描时的事务处理
+
+
+
 org.springframework.transaction.support.AbstractPlatformTransactionManager
 
 org.springframework.jdbc.datasource.DataSourceTransactionManager

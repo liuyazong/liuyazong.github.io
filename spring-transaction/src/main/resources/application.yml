@@ -4,7 +4,7 @@ spring:
     url: jdbc:mysql://127.0.0.1:3306/dev?useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull&serverTimezone=UTC
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: root
-    password: mysql
+    password: mysqlmysql
     hikari:
       maximum-pool-size: 200
       minimum-idle: 20
