@@ -7,8 +7,6 @@ tags: TCP, HTTP
 categories: TCP, HTTP
 ---
 
-# TCP链接的建立与断开
-
 TCP链接的建立需要三次挥手，而断开需要四次挥手。
 
 ## 三次握手
