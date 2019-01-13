@@ -15,6 +15,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <start-class>l.y.z.TcpApp</start-class>
     </properties>
 
     <dependencies>
