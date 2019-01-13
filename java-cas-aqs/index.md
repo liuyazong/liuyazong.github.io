@@ -10,13 +10,13 @@ categories: java, CAS, AQS
 本文介绍两方面的知识：
 * CAS: compare and swap
 * AQS: AbstractQueuedSynchronizer
-# CAS
+## CAS
 
 CAS是compare and swap的缩写，由Unsafe类调用native方法实现。CAS由cpu指令支持，是一个原子操作。
 
 代码实例基于Java 8。
 
-## Unsafe类api
+### Unsafe类api
 
 以下仅列出关于CAS的方法。
 
@@ -103,7 +103,7 @@ Unsafe类还实现了一些循环cas的方法，这些方法使用CAS保证对�
     }
 ```
 
-## Unsafe类实例
+### Unsafe类实例
 
 一个完整的计数器实例，使用Unsafe类的CAS方法实现了线程安全的递增操作。
 
@@ -163,11 +163,11 @@ Unsafe类还实现了一些循环cas的方法，这些方法使用CAS保证对�
     }
 ```
 
-## java.util.concurrent.atomic包
+### java.util.concurrent.atomic包
 
 这个包下是JDK提供的基于Unsafe类的原子操作类，包括AtomicBoolean、AtomicInteger等，以及下文解决ABA问题的AtomicStampedReference类。
 
-## ABA问题
+### ABA问题
 
 说到CAS就不得不提的ABA问题。
 
@@ -366,7 +366,7 @@ AtomicMarkableReference与之类似，不BB它了。
 以上就是CAS操作的简单介绍。
 下文开始介绍AQS相关知识。
 
-# AQS
+## AQS
 
 AQS就是指的JDK中的AbstractQueuedSynchronizer类了。它使用Unsafe类实现变量的安全更新，是整个juc包构建锁和其他同步设施的基础。
 
