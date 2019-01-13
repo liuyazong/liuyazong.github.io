@@ -10,6 +10,7 @@ categories: java, CAS, AQS
 本文介绍两方面的知识：
 * CAS: compare and swap
 * AQS: AbstractQueuedSynchronizer
+
 ## CAS
 
 CAS是compare and swap的缩写，由Unsafe类调用native方法实现。CAS由cpu指令支持，是一个原子操作。
