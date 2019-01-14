@@ -19,6 +19,6 @@ public class SpringTxAppTest {
 
     @Test
     public void contextLoad() {
-        userService.test();
+        //userService.test();
     }
 }

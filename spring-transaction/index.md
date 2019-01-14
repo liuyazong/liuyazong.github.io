@@ -2,6 +2,11 @@
 
 ## 组件扫描时的事务处理
 
+org.springframework.boot.autoconfigure.transaction.TransactionAutoConfiguration
+org.springframework.transaction.annotation.EnableTransactionManagement
+org.springframework.transaction.annotation.ProxyTransactionManagementConfiguration
+org.springframework.transaction.annotation.AnnotationTransactionAttributeSource
+org.springframework.transaction.annotation.SpringTransactionAnnotationParser
 
 
 org.springframework.transaction.support.AbstractPlatformTransactionManager
@@ -11,9 +16,3 @@ org.springframework.jdbc.datasource.DataSourceTransactionManager
 org.springframework.transaction.support.TransactionSynchronizationManager
 
 org.springframework.jdbc.datasource.DataSourceUtils
-
-org.springframework.transaction.annotation.SpringTransactionAnnotationParser
-
-org.springframework.transaction.annotation.AnnotationTransactionAttributeSource
-
-org.springframework.transaction.annotation.ProxyTransactionManagementConfiguration
