@@ -7,7 +7,11 @@ tags: Spring Boot, Spring
 categories: Spring Boot, Spring
 ---
 
-文章以最基本的Spring Boot项目（非SERVLET、非REACTIVE）介绍它的启动、加载流程。
+文章主要从以下三个方面来分析Spring Boot项目的启动流程
+0. <a href="#ct1">SpringApplication的创建及执行</a>
+1. 配置的读取，如application.yml/application.properties等
+2. component scan的实现，如常见的注解Service、Component、Autowired等
+3. bean的实例化及初始化
 
 AnnotationConfigApplicationContext继承结构
 
@@ -17,17 +21,7 @@ DefaultListableBeanFactory继承结构
 
 ![DefaultListableBeanFactory](DefaultListableBeanFactory.png)
 
-# 创建Spring Boot项目
-
-添加依赖
-```xml
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter</artifactId>
-</dependency>
-```
-
-创建mainClass
+一般情况下，创建下面这样一个类，添加Spring Boot的jar包就可以启动一个Spring Boot项目了。我们的分析也将从这里开始。
 
 ```java
 @SpringBootApplication
@@ -37,11 +31,7 @@ public class MainApp {
     }
 }
 ```
-
-mainClass它主要做了两件事：
-* 创建SpringApplication实例
-* 调用SpringApplication实例的run方法
-
+<div id='ct1'/>
 # SpringApplication
 
 ## SpringApplication构造器
@@ -1486,6 +1476,5 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
         this.earlySingletonObjects.remove(a);
         this.registeredSingletons.add(a);    
 
-### 实例化流程
+# 总结
 
-![Spring Singleton Bean](Spring%20Singleton%20Bean.png)
