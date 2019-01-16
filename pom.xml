@@ -12,6 +12,7 @@
         <module>java-cas-aqs</module>
         <module>spring-transaction</module>
         <module>tcp-link</module>
+        <module>spring-boot-source-code</module>
     </modules>
 
     <parent>
