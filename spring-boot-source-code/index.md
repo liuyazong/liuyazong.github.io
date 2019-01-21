@@ -8,7 +8,7 @@ categories: Spring Boot, Spring
 ---
 
 文章主要从以下三个方面来分析Spring Boot项目的启动流程
-0. <a href="#ct1">SpringApplication的创建及执行</a>
+0. SpringApplication的创建及run方法执行
 1. 配置的读取，如application.yml/application.properties等
 2. component scan的实现，如常见的注解Service、Component、Autowired等
 3. bean的实例化及初始化
@@ -31,7 +31,7 @@ public class MainApp {
     }
 }
 ```
-<div id='ct1'/>
+
 # SpringApplication
 
 ## SpringApplication构造器
@@ -59,6 +59,8 @@ public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySourc
 
 ### ApplicationContextInitializer
 
+使用SpringFactoriesLoader从spring.factories中加载的ApplicationContextInitializer实例有以下这些。
+
 ```properties
 # /spring-boot-2.1.1.RELEASE.jar!/META-INF/spring.factories
 # Application Context Initializers
@@ -75,9 +77,11 @@ org.springframework.boot.autoconfigure.SharedMetadataReaderFactoryContextInitial
 org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLoggingListener
 ```
 
-用户初始化ApplicationContext的回调方法，在ApplicationContext创建之后、refresh方法被调用之前，由SpringApplication执行其initialize逻辑，此时可以对ApplicationContext做一些自定义的处理。其实就是在prepareContext时。
+在ConfigurableApplicationContext的refresh方法被调用之前，用于初始化ConfigurableApplicationContext实例的回调接口，这些ApplicationContextInitializer在ConfigurableApplicationContext实例被创建之后执行。
 
 ### ApplicationListener
+
+使用SpringFactoriesLoader从spring.factories中加载的ApplicationListener实例有以下这些。
 
 ```properties
 # /spring-boot-2.1.1.RELEASE.jar!/META-INF/spring.factories
@@ -100,6 +104,166 @@ org.springframework.context.ApplicationListener=\
 org.springframework.boot.autoconfigure.BackgroundPreinitializer
 ```
 
+基于java java.util.EventListener接口的观察者模式。用于处理Spring容器中的ApplicationEvent事件。
+
+后面会着重说明ConfigFileApplicationListener类。
+
+**可以自己实现ApplicationContextInitializer、ApplicationListener并将其配置到spring.factories文件中来实现对Spring Boot应用的定制。**
+
+## run方法
+
+这个run方法直指SpringApplication实例的的(String... args)方法。
+
+```java
+public ConfigurableApplicationContext run(String... args) {
+    StopWatch stopWatch = new StopWatch();
+    stopWatch.start();
+    ConfigurableApplicationContext context = null;
+    Collection<SpringBootExceptionReporter> exceptionReporters = new ArrayList<>();
+    configureHeadlessProperty();
+    //SpringApplication实例的run方法的监听器。从spring.factories加载并实例化所有SpringApplicationRunListener的实现类
+    //目前为止spring.factories中配置的SpringApplicationRunListener的实现只有EventPublishingRunListener，并且也仅有这一个实现类
+    SpringApplicationRunListeners listeners = getRunListeners(args);
+    //发布ApplicationStartingEvent事件
+    //getApplicationListeners(event, type) = {ArrayList@1999}  size = 4
+    // 0 = {LoggingApplicationListener@2009} 
+    // 1 = {BackgroundPreinitializer@2010} 
+    // 2 = {DelegatingApplicationListener@2011}  从配置项context.listener.classes加载并实例化ApplicationListener，然后对当前事件做处理
+    // 3 = {LiquibaseServiceLocatorApplicationListener@2012} 
+    listeners.starting();
+    try {
+        ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
+        //创建environment并调用EnvironmentPostProcessor#postProcessEnvironment进行配置文件读取
+        //ApplicationEnvironmentPreparedEvent
+        ConfigurableEnvironment environment = prepareEnvironment(listeners,applicationArguments);
+        configureIgnoreBeanInfo(environment);
+        Banner printedBanner = printBanner(environment);
+        //根据this.webApplicationType加载并实例化对应的ApplicationContext实现类
+        context = createApplicationContext();
+        exceptionReporters = getSpringFactoriesInstances(
+                SpringBootExceptionReporter.class,
+                new Class[] { ConfigurableApplicationContext.class }, context);
+        //调用ApplicationContextInitializer#initialize
+        //将MainApp注册到BeanFactory
+        //发布ApplicationPreparedEvent事件
+        prepareContext(context, environment, listeners, applicationArguments, printedBanner);
+        //调用AbstractApplicationContext#refresh	
+        refreshContext(context);
+        //空方法，子类可以充重写来扩展功能
+        afterRefresh(context, applicationArguments);
+        stopWatch.stop();
+        if (this.logStartupInfo) {
+            new StartupInfoLogger(this.mainApplicationClass)
+                    .logStarted(getApplicationLog(), stopWatch);
+        }
+        //ApplicationStartedEvent
+        //getApplicationListeners(event, type) = {ArrayList@6652}  size = 2
+        // 0 = {BackgroundPreinitializer@6657} 
+        // 1 = {DelegatingApplicationListener@6658} 
+        listeners.started(context);
+        //调用ApplicationRunner、CommandLineRunner的run方法
+        callRunners(context, applicationArguments);
+    }
+    catch (Throwable ex) {
+        handleRunFailure(context, ex, exceptionReporters, listeners);
+        throw new IllegalStateException(ex);
+    }
+
+    try {
+        //发布ApplicationReadyEvent事件
+        //getApplicationListeners(event, type) = {ArrayList@6676}  size = 3
+        // 0 = {BackgroundPreinitializer@6667} 
+        // 1 = {DelegatingApplicationListener@6546} 
+        listeners.running(context);
+    }
+    catch (Throwable ex) {
+        handleRunFailure(context, ex, exceptionReporters, null);
+        throw new IllegalStateException(ex);
+    }
+    return context;
+}
+```
+
+以下将重点说明该方法的三处代码
+
+* SpringApplicationRunListeners listeners = getRunListeners(args);
+* ConfigurableEnvironment environment = prepareEnvironment(listeners, applicationArguments);
+* context = createApplicationContext();
+* prepareContext(context, environment, listeners, applicationArguments, printedBanner);
+* refreshContext(context);
+* afterRefresh(context, applicationArguments);
+* listeners.started(context);
+* callRunners(context, applicationArguments);
+* listeners.running(context);
+
+### SpringApplicationRunListeners listeners = getRunListeners(args);
+
+从spring.factories中加载并实例化接口SpringApplicationRunListener的实现类，如下
+
+```properties
+# Run Listeners
+org.springframework.boot.SpringApplicationRunListener=\
+org.springframework.boot.context.event.EventPublishingRunListener
+```
+    
+目前为止，接口SpringApplicationRunListener的实现类只有一个，就是EventPublishingRunListener。
+
+Spring Boot要求，SpringApplicationRunListener的实现必须有一个接受SpringApplication application, String[] args两个参数的构造器。看EventPublishingRunListener的构造器。
+
+```java
+public EventPublishingRunListener(SpringApplication application, String[] args) {
+    this.application = application;
+    this.args = args;
+    this.initialMulticaster = new SimpleApplicationEventMulticaster();
+    for (ApplicationListener<?> listener : application.getListeners()) {
+        this.initialMulticaster.addApplicationListener(listener);
+    }
+}
+```
+
+在这里，构造SpringApplication时从spring.factories文件加载的ApplicationListener都被添加到EventPublishingRunListener的initialMulticaster属性中去了。
+
+类SimpleApplicationEventMulticaster在refresh时还会用到。它的作用就相当于是一系列ApplicationListener的代理，当有事件发生时，直接发送给ApplicationEventMulticaster就行。
+
+事件都将通过SpringApplicationRunListeners实例来发布。
+   * ApplicationStartingEvent、ApplicationEnvironmentPreparedEvent、ApplicationEnvironmentPreparedEvent、ApplicationPreparedEvent事件会借助EventPublishingRunListener来发布。
+   * ApplicationStartedEvent、ApplicationReadyEvent事件却是使用ApplicationContext发布。
+
+**可以自己实现SpringApplicationRunListener并将其配置到spring.factories中来实现对SpringApplication的run方法的监听。**
+
+### ConfigurableEnvironment environment = prepareEnvironment(listeners, applicationArguments);
+
+// TODO
+
+创建并初始化ConfigurableEnvironment实例，之后发布ApplicationEnvironmentPreparedEvent事件来调用相应的ApplicationListener对ConfigurableEnvironment实例做进一步的处理。
+
+```java
+private ConfigurableEnvironment prepareEnvironment(
+        SpringApplicationRunListeners listeners,
+        ApplicationArguments applicationArguments) {
+    // Create and configure the environment
+    ConfigurableEnvironment environment = getOrCreateEnvironment();
+    configureEnvironment(environment, applicationArguments.getSourceArgs());
+    //发布ApplicationEnvironmentPreparedEvent事件
+    //getApplicationListeners(event, type) = {ArrayList@2170}  size = 7
+    // 0 = {ConfigFileApplicationListener@2176} 从spring.factories中加载并实例化EnvironmentPostProcessor，自身也是一个EnvironmentPostProcessor的实现。对这些EnvironmentPostProcessor排序，然后调用EnvironmentPostProcessor#postProcessEnvironment方法。
+    // 1 = {AnsiOutputApplicationListener@2177} 
+    // 2 = {LoggingApplicationListener@2178} 
+    // 3 = {ClasspathLoggingApplicationListener@2179} 
+    // 4 = {BackgroundPreinitializer@2180} 
+    // 5 = {DelegatingApplicationListener@2181} 
+    // 6 = {FileEncodingApplicationListener@2182} 
+    listeners.environmentPrepared(environment);
+    bindToSpringApplication(environment);
+    if (!this.isCustomEnvironment) {
+        environment = new EnvironmentConverter(getClassLoader())
+                .convertEnvironmentIfNecessary(environment, deduceEnvironmentClass());
+    }
+    ConfigurationPropertySources.attach(environment);
+    return environment;
+}
+```
+	
 这里看下org.springframework.boot.context.config.ConfigFileApplicationListener这个类，它处理ApplicationEnvironmentPreparedEvent和ApplicationPreparedEvent两个事件。
 
 ApplicationEnvironmentPreparedEvent事件完成了配置文件的加载
@@ -155,7 +319,7 @@ new Loader(environment, resourceLoader).load();
 ```
 Loader类实现了配置文件的加载。
 
-1. 从spring.factories中加载值为org.springframework.boot.env.PropertySourceLoader的属性并实例化这些类
+1. 从spring.factories中加载PropertySourceLoader的实现类并实例化这些类
 
     ```properties
     # PropertySource Loaders
@@ -177,170 +341,10 @@ Loader类实现了配置文件的加载。
 
     它将配置文件封装为PropertySource并添加到当前Environment实例的propertySources中。
 
-
-ApplicationPreparedEvent事件向ApplicationContext添加了一个BeanFactoryPostProcessor实例，该实例将当前Environment的propertySources中的defaultProperties移到propertySources的末尾。
-
-```java
-private void onApplicationPreparedEvent(ApplicationEvent event) {
-    this.logger.switchTo(ConfigFileApplicationListener.class);
-    addPostProcessors(((ApplicationPreparedEvent) event).getApplicationContext());
-}
-protected void addPostProcessors(ConfigurableApplicationContext context) {
-    context.addBeanFactoryPostProcessor(
-            new PropertySourceOrderingPostProcessor(context));
-}
-```
-
-**可以自己实现ApplicationContextInitializer、ApplicationListener并将其配置到spring.factories文件中来实现对Spring Boot应用的定制。**
-
-## run方法
-
-这个run方法直指SpringApplication实例的的(String... args)方法。
-
-```java
-public ConfigurableApplicationContext run(String... args) {
-    StopWatch stopWatch = new StopWatch();
-    stopWatch.start();
-    ConfigurableApplicationContext context = null;
-    Collection<SpringBootExceptionReporter> exceptionReporters = new ArrayList<>();
-    configureHeadlessProperty();
-    //SpringApplication实例的run方法的监听器。从spring.factories加载并实例化所有SpringApplicationRunListener的实现类
-    //目前为止spring.factories中配置的SpringApplicationRunListener的实现只有EventPublishingRunListener，并且也仅有这一个实现类
-    SpringApplicationRunListeners listeners = getRunListeners(args);
-    //发布ApplicationStartingEvent事件
-    //getApplicationListeners(event, type) = {ArrayList@1999}  size = 4
-    // 0 = {LoggingApplicationListener@2009} 
-    // 1 = {BackgroundPreinitializer@2010} 
-    // 2 = {DelegatingApplicationListener@2011}  从配置项context.listener.classes加载并实例化ApplicationListener，然后对当前事件做处理
-    // 3 = {LiquibaseServiceLocatorApplicationListener@2012} 
-    listeners.starting();
-    try {
-        ApplicationArguments applicationArguments = new DefaultApplicationArguments(
-                args);
-        //创建environment并调用EnvironmentPostProcessor#postProcessEnvironment进行配置文件读取
-        //ApplicationEnvironmentPreparedEvent
-        ConfigurableEnvironment environment = prepareEnvironment(listeners,applicationArguments);
-        configureIgnoreBeanInfo(environment);
-        Banner printedBanner = printBanner(environment);
-        //根据this.webApplicationType加载并实例化对应的ApplicationContext实现类
-        context = createApplicationContext();
-        exceptionReporters = getSpringFactoriesInstances(
-                SpringBootExceptionReporter.class,
-                new Class[] { ConfigurableApplicationContext.class }, context);
-        //调用ApplicationContextInitializer#initialize
-        //将MainApp注册到BeanFactory
-        //发布ApplicationPreparedEvent事件
-        prepareContext(context, environment, listeners, applicationArguments,
-                printedBanner);
-        //调用AbstractApplicationContext#refresh	
-        refreshContext(context);
-        //空方法，子类可以充重写来扩展功能
-        afterRefresh(context, applicationArguments);
-        stopWatch.stop();
-        if (this.logStartupInfo) {
-            new StartupInfoLogger(this.mainApplicationClass)
-                    .logStarted(getApplicationLog(), stopWatch);
-        }
-        //ApplicationStartedEvent
-        //getApplicationListeners(event, type) = {ArrayList@6652}  size = 2
-        // 0 = {BackgroundPreinitializer@6657} 
-        // 1 = {DelegatingApplicationListener@6658} 
-        listeners.started(context);
-        //调用ApplicationRunner、CommandLineRunner的run方法
-        callRunners(context, applicationArguments);
-    }
-    catch (Throwable ex) {
-        handleRunFailure(context, ex, exceptionReporters, listeners);
-        throw new IllegalStateException(ex);
-    }
-
-    try {
-        //发布ApplicationReadyEvent事件
-        //getApplicationListeners(event, type) = {ArrayList@6676}  size = 3
-        // 0 = {BackgroundPreinitializer@6667} 
-        // 1 = {DelegatingApplicationListener@6546} 
-        listeners.running(context);
-    }
-    catch (Throwable ex) {
-        handleRunFailure(context, ex, exceptionReporters, null);
-        throw new IllegalStateException(ex);
-    }
-    return context;
-}
-```
-
-### SpringApplicationRunListeners listeners = getRunListeners(args);
-
-从spring.factories中加载并实例化接口SpringApplicationRunListener的实现类。
-
-```properties
-# Run Listeners
-org.springframework.boot.SpringApplicationRunListener=\
-org.springframework.boot.context.event.EventPublishingRunListener
-```    
-    
-目前为止，接口SpringApplicationRunListener的实现类只有一个，就是EventPublishingRunListener。
-
-Spring Boot要求，SpringApplicationRunListener的实现必须有一个接受SpringApplication application, String[] args两个参数的构造器。看EventPublishingRunListener的构造器。
-
-```java
-public EventPublishingRunListener(SpringApplication application, String[] args) {
-    this.application = application;
-    this.args = args;
-    this.initialMulticaster = new SimpleApplicationEventMulticaster();
-    for (ApplicationListener<?> listener : application.getListeners()) {
-        this.initialMulticaster.addApplicationListener(listener);
-    }
-}
-```
-
-在这里，构造SpringApplication时从spring.factories文件加载的ApplicationListener都被添加到EventPublishingRunListener的initialMulticaster属性中去了。
-
-类SimpleApplicationEventMulticaster在refresh时还会用到。它的作用就相当于是一系列ApplicationListener的代理，当有事件发生时，直接发送给ApplicationEventMulticaster就行。
-
-事件都将通过SpringApplicationRunListeners实例来发布。
-   * ApplicationStartingEvent、ApplicationEnvironmentPreparedEvent、ApplicationEnvironmentPreparedEvent、ApplicationPreparedEvent事件会借助EventPublishingRunListener来发布。
-   * ApplicationStartedEvent、ApplicationReadyEvent事件却是使用ApplicationContext发布。
-
-**可以自己实现SpringApplicationRunListener并将其配置到spring.factories中来实现对SpringApplication的run方法的监听。**
-
-### ConfigurableEnvironment environment = prepareEnvironment(listeners, applicationArguments);
-
-创建并初始化ConfigurableEnvironment实例，之后发布ApplicationEnvironmentPreparedEvent事件来调用相应的ApplicationListener对ConfigurableEnvironment实例做进一步的处理。
-
-```java
-private ConfigurableEnvironment prepareEnvironment(
-        SpringApplicationRunListeners listeners,
-        ApplicationArguments applicationArguments) {
-    // Create and configure the environment
-    ConfigurableEnvironment environment = getOrCreateEnvironment();
-    configureEnvironment(environment, applicationArguments.getSourceArgs());
-    //发布ApplicationEnvironmentPreparedEvent事件
-    //getApplicationListeners(event, type) = {ArrayList@2170}  size = 7
-    // 0 = {ConfigFileApplicationListener@2176} 从spring.factories中加载并实例化EnvironmentPostProcessor，自身也是一个EnvironmentPostProcessor的实现。对这些EnvironmentPostProcessor排序，然后调用EnvironmentPostProcessor#postProcessEnvironment方法。
-    // 1 = {AnsiOutputApplicationListener@2177} 
-    // 2 = {LoggingApplicationListener@2178} 
-    // 3 = {ClasspathLoggingApplicationListener@2179} 
-    // 4 = {BackgroundPreinitializer@2180} 
-    // 5 = {DelegatingApplicationListener@2181} 
-    // 6 = {FileEncodingApplicationListener@2182} 
-    listeners.environmentPrepared(environment);
-    bindToSpringApplication(environment);
-    if (!this.isCustomEnvironment) {
-        environment = new EnvironmentConverter(getClassLoader())
-                .convertEnvironmentIfNecessary(environment, deduceEnvironmentClass());
-    }
-    ConfigurationPropertySources.attach(environment);
-    return environment;
-}
-```
-	
-这里重点关注ConfigFileApplicationListener，它对ApplicationEnvironmentPreparedEvent的处理前面已经介绍过。
-
 ### context = createApplicationContext();
 
 这里创建了ApplicationContext实例，其实是AnnotationConfigApplicationContext的实例。
-AnnotationConfigServletWebServerApplicationContext的无参构造器及其父类GenericApplicationContext的无参构造器
+AnnotationConfigApplicationContext的无参构造器及其父类GenericApplicationContext的无参构造器
 
 ```java
 public AnnotationConfigApplicationContext() {
@@ -352,7 +356,6 @@ public GenericApplicationContext() {
     this.beanFactory = new DefaultListableBeanFactory();
 }
 ```
-	
 
 AnnotationConfigApplicationContext的父类GenericApplicationContext持有一个DefaultListableBeanFactory实例。
 
@@ -366,16 +369,16 @@ AnnotationConfigApplicationContext和DefaultListableBeanFactory这两个类都�
 
 | bean name | bean class | 用途 |
 |:----|:----|:----|
-|org.springframework.context.annotation.internalConfigurationAnnotationProcessor    |ConfigurationClassPostProcessor            |处理@Configuration、@Bean、@Service、@Component                   |
-|org.springframework.context.annotation.internalAutowiredAnnotationProcessor        |AutowiredAnnotationBeanPostProcessor       |处理@Autowired、@Value，支持@Inject                               |
-|org.springframework.context.annotation.internalRequiredAnnotationProcessor         |RequiredAnnotationBeanPostProcessor        |处理@Required                                                    |
-|org.springframework.context.annotation.internalCommonAnnotationProcessor           |CommonAnnotationBeanPostProcessor          |处理@PostConstruct、@PreDestroy、@Resource、@WebServiceRef、@EJB  |
+|org.springframework.context.annotation.internalConfigurationAnnotationProcessor    |ConfigurationClassPostProcessor            |启动时处理@Configuration|
+|org.springframework.context.annotation.internalAutowiredAnnotationProcessor        |AutowiredAnnotationBeanPostProcessor       |处理@Autowired、@Value，支持@javax.inject.Inject                              |
+|org.springframework.context.annotation.internalCommonAnnotationProcessor           |CommonAnnotationBeanPostProcessor          |处理javax.annotation包下的注解，@PostConstruct、@PreDestroy、@Resource、@WebServiceRef、@EJB  |
 |org.springframework.context.event.internalEventListenerProcessor                   |EventListenerMethodProcessor               |处理@EventListener                                               |
 |org.springframework.context.event.internalEventListenerFactory                     |DefaultEventListenerFactory                |处理@EventListener                                               |
 
-
 其中，ConfigurationClassPostProcessor是BeanFactoryPostProcessor的实现，同时也实现了BeanDefinitionRegistryPostProcessor；
-AutowiredAnnotationBeanPostProcessor、RequiredAnnotationBeanPostProcessor、CommonAnnotationBeanPostProcessor是BeanPostProcessor的实现。
+
+AutowiredAnnotationBeanPostProcessor、CommonAnnotationBeanPostProcessor是BeanPostProcessor的实现。
+
 后面refresh时会用到这几个类。
 
 ### prepareContext(context, environment, listeners, applicationArguments, printedBanner);
@@ -419,8 +422,6 @@ private void prepareContext(ConfigurableApplicationContext context,
     listeners.contextLoaded(context);
 }
 ```
-
-这里又看到ConfigFileApplicationListener了，它对ApplicationPreparedEvent事件做了处理，前面已经介绍过了。
 
 目前为止事件的发布都是使用的EventPublishingRunListener#initialMulticaster来进行的。
 后面的事件发布都是用AbstractApplicationContext#applicationEventMulticaster来进行。
@@ -684,8 +685,8 @@ public static void invokeBeanFactoryPostProcessors(
     }
 
     // First, invoke the BeanFactoryPostProcessors that implement PriorityOrdered.
-    priorityOrderedPostProcessors = {ArrayList@4373}  size = 1
-    0 = {PropertySourcesPlaceholderConfigurer@4378} 处理 ${...} 
+    //priorityOrderedPostProcessors = {ArrayList@4373}  size = 1
+    //0 = {PropertySourcesPlaceholderConfigurer@4378} 处理 ${...} 
     sortPostProcessors(priorityOrderedPostProcessors, beanFactory);
     invokeBeanFactoryPostProcessors(priorityOrderedPostProcessors, beanFactory);
 
@@ -699,9 +700,9 @@ public static void invokeBeanFactoryPostProcessors(
     invokeBeanFactoryPostProcessors(orderedPostProcessors, beanFactory);
 
     // Finally, invoke all other BeanFactoryPostProcessors.
-    nonOrderedPostProcessors = {ArrayList@4398}  size = 2
-    0 = {ConfigurationBeanFactoryMetadata@4402} 
-    1 = {ErrorMvcAutoConfiguration$PreserveErrorControllerTargetClassPostProcessor@4403} 
+    //nonOrderedPostProcessors = {ArrayList@4398}  size = 2
+    //0 = {ConfigurationBeanFactoryMetadata@4402} 
+    //1 = {ErrorMvcAutoConfiguration$PreserveErrorControllerTargetClassPostProcessor@4403} 
     List<BeanFactoryPostProcessor> nonOrderedPostProcessors = new ArrayList<>();
     for (String postProcessorName : nonOrderedPostProcessorNames) {
         nonOrderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
@@ -904,6 +905,7 @@ protected final SourceClass doProcessConfigurationClass(ConfigurationClass confi
     }
 
     // Process any @Import annotations
+    // TODO
     // 处理@Import注解，递归
     processImports(configClass, sourceClass, getImports(sourceClass), true);
 
@@ -957,7 +959,7 @@ ConfigurationClassParser：处理@Configuration的类
 处理@ComponentScans、@ComponentScan
 	使用ComponentScanAnnotationParser
 		使用ClassPathBeanDefinitionScanner
-@Import
+处理@Import
 处理@ImportResource
 处理@Bean
 
