@@ -1614,7 +1614,6 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 
 5.
     BeanFactoryPostProcessor，用于对Spring应用中的bean definitions修改。
-
     ConfigurationClassPostProcessor是BeanFactoryPostProcessor的一个实现，处理配置类的加载解析。
 
 6.
