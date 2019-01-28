@@ -34,6 +34,122 @@ public class MainApp {
 
 # SpringApplication
 
+## 自动配置
+
+@SpringBootApplication
+
+Spring Boot应用启动时，会处理这个注解。
+
+```java
+@SpringBootConfiguration
+@EnableAutoConfiguration
+@ComponentScan(excludeFilters = {
+		@Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
+		@Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class) })
+public @interface SpringBootApplication {
+
+	/**
+	 * 排除自动配置
+	 * Exclude specific auto-configuration classes such that they will never be applied.
+	 * @return the classes to exclude
+	 */
+	@AliasFor(annotation = EnableAutoConfiguration.class)
+	Class<?>[] exclude() default {};
+
+	/**
+	 * 排除自动配置
+	 * Exclude specific auto-configuration class names such that they will never be
+	 * applied.
+	 * @return the class names to exclude
+	 * @since 1.3.0
+	 */
+	@AliasFor(annotation = EnableAutoConfiguration.class)
+	String[] excludeName() default {};
+
+	/**
+	 * 需要扫描的包 
+	 * Base packages to scan for annotated components. Use {@link #scanBasePackageClasses}
+	 * for a type-safe alternative to String-based package names.
+	 * @return base packages to scan
+	 * @since 1.3.0
+	 */
+	@AliasFor(annotation = ComponentScan.class, attribute = "basePackages")
+	String[] scanBasePackages() default {};
+
+	/**
+	 * 需要扫描的包
+	 * Type-safe alternative to {@link #scanBasePackages} for specifying the packages to
+	 * scan for annotated components. The package of each class specified will be scanned.
+	 * <p>
+	 * Consider creating a special no-op marker class or interface in each package that
+	 * serves no purpose other than being referenced by this attribute.
+	 * @return base packages to scan
+	 * @since 1.3.0
+	 */
+	@AliasFor(annotation = ComponentScan.class, attribute = "basePackageClasses")
+	Class<?>[] scanBasePackageClasses() default {};
+
+}
+```
+
+```java
+@AutoConfigurationPackage
+@Import(AutoConfigurationImportSelector.class)
+public @interface EnableAutoConfiguration {
+
+	String ENABLED_OVERRIDE_PROPERTY = "spring.boot.enableautoconfiguration";
+
+	/**
+	 * 排除自动配置 
+	 * Exclude specific auto-configuration classes such that they will never be applied.
+	 * @return the classes to exclude
+	 */
+	Class<?>[] exclude() default {};
+
+	/**
+     * 排除自动配置
+	 * Exclude specific auto-configuration class names such that they will never be
+	 * applied.
+	 * @return the class names to exclude
+	 * @since 1.3.0
+	 */
+	String[] excludeName() default {};
+
+}
+```
+
+```java
+@Import(AutoConfigurationPackages.Registrar.class)
+public @interface AutoConfigurationPackage {
+
+}
+
+```
+
+```java
+public @interface Import {
+
+	/**
+	 * {@link Configuration}, {@link ImportSelector}, {@link ImportBeanDefinitionRegistrar}
+	 * or regular component classes to import.
+	 */
+	Class<?>[] value();
+
+}
+```
+
+这里使用@Import(AutoConfigurationImportSelector.class)导入了一个类AutoConfigurationImportSelector，这个类是DeferredImportSelector的实现类，也是ImportSelector的实现。
+
+Spring在处理@Import注解时，如果它导入的是ImportSelector实现类，则会调用它的selectImports方法。
+
+AutoConfigurationImportSelector类的selectImports方法从spring.factories文件加载key为org.springframework.boot.autoconfigure.EnableAutoConfiguration的属性，然后将这个属性的值作为配置类进行处理。
+
+自动配置就是这么实现的。
+
+而当@Import的是ImportBeanDefinitionRegistrar实现类时，则会调用它的registerBeanDefinitions方法。
+
+@ComponentScan、@ComponentScans。
+
 ## SpringApplication构造器
 
 ```java
@@ -67,6 +183,7 @@ public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySourc
 org.springframework.context.ApplicationContextInitializer=\
 org.springframework.boot.context.ConfigurationWarningsApplicationContextInitializer,\
 org.springframework.boot.context.ContextIdApplicationContextInitializer,\
+# 从配置属性context.initializer.classes加载ApplicationContextInitializer实例
 org.springframework.boot.context.config.DelegatingApplicationContextInitializer,\
 org.springframework.boot.web.context.ServerPortInfoApplicationContextInitializer
 
@@ -1479,4 +1596,33 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
         this.registeredSingletons.add(a);    
 
 # 总结
+
+1. 
+    @SpringBootApplication
+    
+    @EnableAutoConfiguration，处理自动配置，在其上使用@Import了导入了一个ImportSelector的实现类AutoConfigurationImportSelector，用来处理spring.factories中的org.springframework.boot.autoconfigure.EnableAutoConfiguration属性，然后将这个属性的值作为配置类进行处理。
+
+2. 
+
+    ApplicationContextInitializer，用于初始化ApplicationContext实例，将它的实现类以org.springframework.context.ApplicationContextInitializer为key配置在spring.factories中。
+    DelegatingApplicationContextInitializer从配置属性context.initializer.classes中加载ApplicationContextInitializer的实例并使用这些实例对ApplicationContext实例进行初始化。
+
+3.
+
+    ApplicationListener，用于Application的事件监听，ConfigFileApplicationListener用于加载配置文件。
+
+4.
+
+    AbstractApplicationContext，整个Spring应用的上下文。
+
+5.
+
+    BeanFactoryPostProcessor，用于对Spring应用中的bean definitions修改。
+
+    ConfigurationClassPostProcessor是BeanFactoryPostProcessor的一个实现，处理配置类的加载解析。
+
+6.
+
+    BeanPostProcessor，用于对Spring应用中new bean instance的修改，如生成代理等。AutowiredAnnotationBeanPostProcessor、CommonAnnotationBeanPostProcessor是BeanPostProcessor的实现，用于对@Autowired、@PostConstruct、@PreDestroy、@Resource的处理。
+
 
