@@ -1603,26 +1603,21 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
     @EnableAutoConfiguration，处理自动配置，在其上使用@Import了导入了一个ImportSelector的实现类AutoConfigurationImportSelector，用来处理spring.factories中的org.springframework.boot.autoconfigure.EnableAutoConfiguration属性，然后将这个属性的值作为配置类进行处理。
 
 2. 
-
     ApplicationContextInitializer，用于初始化ApplicationContext实例，将它的实现类以org.springframework.context.ApplicationContextInitializer为key配置在spring.factories中。
     DelegatingApplicationContextInitializer从配置属性context.initializer.classes中加载ApplicationContextInitializer的实例并使用这些实例对ApplicationContext实例进行初始化。
 
 3.
-
     ApplicationListener，用于Application的事件监听，ConfigFileApplicationListener用于加载配置文件。
 
 4.
-
     AbstractApplicationContext，整个Spring应用的上下文。
 
 5.
-
     BeanFactoryPostProcessor，用于对Spring应用中的bean definitions修改。
 
     ConfigurationClassPostProcessor是BeanFactoryPostProcessor的一个实现，处理配置类的加载解析。
 
 6.
-
     BeanPostProcessor，用于对Spring应用中new bean instance的修改，如生成代理等。AutowiredAnnotationBeanPostProcessor、CommonAnnotationBeanPostProcessor是BeanPostProcessor的实现，用于对@Autowired、@PostConstruct、@PreDestroy、@Resource的处理。
 
 
