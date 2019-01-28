@@ -107,7 +107,7 @@ public @interface EnableAutoConfiguration {
 	Class<?>[] exclude() default {};
 
 	/**
-     * 排除自动配置
+	 * 排除自动配置
 	 * Exclude specific auto-configuration class names such that they will never be
 	 * applied.
 	 * @return the class names to exclude
