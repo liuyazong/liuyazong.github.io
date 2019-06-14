@@ -12,6 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class MainApp {
 
     public static void main(String[] args) {
+        System.err.println(Runtime.getRuntime().availableProcessors());
         SpringApplication.run(MainApp.class, args);
     }
 }

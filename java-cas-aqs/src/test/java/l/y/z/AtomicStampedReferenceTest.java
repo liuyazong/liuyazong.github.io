@@ -45,8 +45,8 @@ public class AtomicStampedReferenceTest {
                 countDownLatch1.await();
             } catch (InterruptedException e) {
             }
-            boolean b = atomicStampedReference.compareAndSet(v, 2, stamp, stamp + 1);
-            log.info("update: {}, value: {}  --->>  {}", b, v, 2);
+            boolean b = atomicStampedReference.compareAndSet(v, v , stamp, stamp + 1);
+            log.info("update: {}, value: {}  --->>  {}, {}", b, v, v , stamp);
             countDownLatch3.countDown();
         });
         Thread thread1 = new Thread(() -> {
@@ -56,8 +56,8 @@ public class AtomicStampedReferenceTest {
             }
             Integer v = atomicStampedReference.getReference();
             int stamp = atomicStampedReference.getStamp();
-            boolean b = atomicStampedReference.compareAndSet(v, 1, stamp, stamp + 1);
-            log.info("update: {}, value: {} --->> {}", b, v, 1);
+            boolean b = atomicStampedReference.compareAndSet(v, v , stamp, stamp + 1);
+            log.info("update: {}, value: {} --->> {}, {}", b, v, v , stamp);
             countDownLatch2.countDown();
         });
         Thread thread3 = new Thread(() -> {
@@ -68,8 +68,8 @@ public class AtomicStampedReferenceTest {
                 countDownLatch2.await();
             } catch (InterruptedException e) {
             }
-            boolean b = atomicStampedReference.compareAndSet(v, 3, stamp, stamp + 1);
-            log.info("update: {}, value: {} --->> {}", b, v, 3);
+            boolean b = atomicStampedReference.compareAndSet(v, v + 1, stamp, stamp + 1);
+            log.info("update: {}, value: {} --->> {}, {}", b, v, v + 1, stamp);
         });
 
         thread1.start();
