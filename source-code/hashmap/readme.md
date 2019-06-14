@@ -1,6 +1,8 @@
 # HashMap
 
-主要看put、get、remove、resize操作，不看红黑树的结点插入、删除、查找等操作
+主要看put、get、remove、resize操作，不看红黑树的结点插入、删除、查找等操作。
+
+首先，以注释源码的方式，看看各个功能的实现；然后，以文字上描述的方式，总结各个功能的实现过程。
 
 ## 内部属性
 
@@ -135,12 +137,13 @@
                 ((k = p.key) == key || (key != null && key.equals(k))))
                 e = p;
             
+            // 表示有hash冲突，无论链表还是红黑树都是为了解决hash冲突
             // 如果p的类型是TreeNode，则执行TreeNode节点的插入，即将当前k-v插入到红黑树中    
             else if (p instanceof TreeNode)
                 e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
             else {
 
-                // 到这里就表示有hash冲突了
+                // 构造一个Node结点，并将其插入到链表的尾部；并且，在需要的时候，将该链表转换为红黑树
                 for (int binCount = 0; ; ++binCount) {
 
                     // 如果p的next节点（e）为空，则使用当前k-v构建Node并将其作为p的next节点
@@ -190,7 +193,11 @@
         afterNodeInsertion(evict);
         return null;
     }
-    
+```
+
+### 链表转红黑树
+
+```java
     /**
      * 当table太小时，使用扩容操作，而不是使用红黑树替换链表
      */
@@ -223,82 +230,82 @@
     }
 
 
-        /**
-         * TreeNode中的方法，将之前使用TreeNode构造的双向链表转换为红黑树
-         */
-        final void treeify(Node<K,V>[] tab) {
-            TreeNode<K,V> root = null;
-            for (TreeNode<K,V> x = this, next; x != null; x = next) {
-                next = (TreeNode<K,V>)x.next;
-                x.left = x.right = null;
-                if (root == null) {
-                    x.parent = null;
-                    x.red = false;
-                    root = x;
-                }
-                else {
-                    K k = x.key;
-                    int h = x.hash;
-                    Class<?> kc = null;
-                    for (TreeNode<K,V> p = root;;) {
-                        int dir, ph;
-                        K pk = p.key;
-                        if ((ph = p.hash) > h)
-                            dir = -1;
-                        else if (ph < h)
-                            dir = 1;
-                        else if ((kc == null &&
-                                  (kc = comparableClassFor(k)) == null) ||
-                                 (dir = compareComparables(kc, k, pk)) == 0)
-                            dir = tieBreakOrder(k, pk);
+    /**
+     * TreeNode中的方法，将之前使用TreeNode构造的双向链表转换为红黑树
+     */
+    final void treeify(Node<K,V>[] tab) {
+        TreeNode<K,V> root = null;
+        for (TreeNode<K,V> x = this, next; x != null; x = next) {
+            next = (TreeNode<K,V>)x.next;
+            x.left = x.right = null;
+            if (root == null) {
+                x.parent = null;
+                x.red = false;
+                root = x;
+            }
+            else {
+                K k = x.key;
+                int h = x.hash;
+                Class<?> kc = null;
+                for (TreeNode<K,V> p = root;;) {
+                    int dir, ph;
+                    K pk = p.key;
+                    if ((ph = p.hash) > h)
+                        dir = -1;
+                    else if (ph < h)
+                        dir = 1;
+                    else if ((kc == null &&
+                              (kc = comparableClassFor(k)) == null) ||
+                             (dir = compareComparables(kc, k, pk)) == 0)
+                        dir = tieBreakOrder(k, pk);
 
-                        TreeNode<K,V> xp = p;
-                        if ((p = (dir <= 0) ? p.left : p.right) == null) {
-                            x.parent = xp;
-                            if (dir <= 0)
-                                xp.left = x;
-                            else
-                                xp.right = x;
-                            root = balanceInsertion(root, x);
-                            break;
-                        }
+                    TreeNode<K,V> xp = p;
+                    if ((p = (dir <= 0) ? p.left : p.right) == null) {
+                        x.parent = xp;
+                        if (dir <= 0)
+                            xp.left = x;
+                        else
+                            xp.right = x;
+                        root = balanceInsertion(root, x);
+                        break;
                     }
                 }
             }
-            
-            // 将构造的红黑树放入table对应的下标出，并将红黑树的跟结点移动到双向链表的头部
-            moveRootToFront(tab, root);
         }
+        
+        // 将构造的红黑树放入table对应的下标出，并将红黑树的跟结点移动到双向链表的头部
+        moveRootToFront(tab, root);
+    }
 
 
-        /**
-         * TreeNode中的方法，将构造的红黑树放入table对应的下标处，并将红黑树的跟结点移动到双向链表的头部
-         */
-        static <K,V> void moveRootToFront(Node<K,V>[] tab, TreeNode<K,V> root) {
-            int n;
-            if (root != null && tab != null && (n = tab.length) > 0) {
-                int index = (n - 1) & root.hash;
-                TreeNode<K,V> first = (TreeNode<K,V>)tab[index];
-                if (root != first) {
-                    Node<K,V> rn;
-                    
-                    // 将构造的红黑树放入table相应的下标处
-                    tab[index] = root;
-                    
-                    // 将红黑树跟结点移动到双向链表的头部
-                    TreeNode<K,V> rp = root.prev;
-                    if ((rn = root.next) != null)
-                        ((TreeNode<K,V>)rn).prev = rp;
-                    if (rp != null)
-                        rp.next = rn;
-                    if (first != null)
-                        first.prev = root;
-                    root.next = first;
-                    root.prev = null;
-                }
-                assert checkInvariants(root);
+    /**
+     * TreeNode中的方法，将构造的红黑树放入table对应的下标处，并将红黑树的跟结点移动到双向链表的头部
+     */
+    static <K,V> void moveRootToFront(Node<K,V>[] tab, TreeNode<K,V> root) {
+        int n;
+        if (root != null && tab != null && (n = tab.length) > 0) {
+            int index = (n - 1) & root.hash;
+            TreeNode<K,V> first = (TreeNode<K,V>)tab[index];
+            if (root != first) {
+                Node<K,V> rn;
+                
+                // 将构造的红黑树放入table相应的下标处
+                tab[index] = root;
+                
+                // 将红黑树跟结点移动到双向链表的头部
+                TreeNode<K,V> rp = root.prev;
+                if ((rn = root.next) != null)
+                    ((TreeNode<K,V>)rn).prev = rp;
+                if (rp != null)
+                    rp.next = rn;
+                if (first != null)
+                    first.prev = root;
+                root.next = first;
+                root.prev = null;
             }
+            assert checkInvariants(root);
         }
+    }
 ```
 
 ## resize操作
@@ -472,14 +479,18 @@
         Node<K,V>[] tab; Node<K,V> p; int n, index;
         if ((tab = table) != null && (n = tab.length) > 0 &&
             (p = tab[index = (n - 1) & hash]) != null) {
+            
+            // 查找key对应的结点
             Node<K,V> node = null, e; K k; V v;
             if (p.hash == hash &&
-                ((k = p.key) == key || (key != null && key.equals(k))))
+                ((k = p.key) == key || (key != null && key.equals(k))))// node结点是p，即node结点是链表头结点或红黑树跟结点
                 node = p;
-            else if ((e = p.next) != null) {
+            else if ((e = p.next) != null) { // 是红黑树或者链表
                 if (p instanceof TreeNode)
                     node = ((TreeNode<K,V>)p).getTreeNode(hash, key);
                 else {
+                    
+                    // 从链表查找key对应的结点，且始终保证p是node的前一个结点
                     do {
                         if (e.hash == hash &&
                             ((k = e.key) == key ||
@@ -491,12 +502,20 @@
                     } while ((e = e.next) != null);
                 }
             }
+            
+            // 从红黑树中、或者从链表中将结点node删除
             if (node != null && (!matchValue || (v = node.value) == value ||
                                  (value != null && value.equals(v)))) {
+                
+                // 从红黑树中删除node结点
                 if (node instanceof TreeNode)
                     ((TreeNode<K,V>)node).removeTreeNode(this, tab, movable);
+                
+                // node结点是链表头结点
                 else if (node == p)
                     tab[index] = node.next;
+                
+                // p是node的前一个结点
                 else
                     p.next = node.next;
                 ++modCount;
@@ -510,3 +529,66 @@
 ```
 
 ## 总结
+
+### put操作
+
+该操作将给定的key-value放入table数组中。
+
+该操作涉及四个参数，分别为key、value、key的hash值、table数组的长度n。
+
+1. 如果table还未初始化，则调用resize方法对table进行初始化，并得到table的长度（默认为16）
+2. 根据key的hash值计算出key在数组中的下标
+    * 如果该下标处为null，则构造一个Node结点并将该结点放在该下标处
+    * 否则（表示有hash冲突，无论链表还是红黑树都是为了解决hash冲突）
+        * 如果该下标处是TreeNode类型的结点，表示该位置是一颗红黑树，进行红黑树的结点插入操作
+        * 否则，是链表类型，构造一个Node结点，插入到链表的尾部；并且在需要的时候将链表转换为红黑树
+3. 如果需要扩容，则进行扩容
+
+### 链表转红黑树
+
+该操作在需要的时候将链表转换为红黑树。
+
+1. 当table为null、或者其长度小于MIN_TREEIFY_CAPACITY（64）时，并不会做转红黑树的操作，即使链表长度已经达到TREEIFY_THRESHOLD（8），这里只会做一个resize操作
+2. 当table数组长度达到MIN_TREEIFY_CAPACITY（64）并且链表长度达到TREEIFY_THRESHOLD（8）时，才会进行链表转红黑树的过程，具体如下
+    1. 使用链表结点的key、value构造TreeNode结点，并使用这些TreeNode结点构造一个双向链表（TreeNode具有双向链表的性质）
+    2. 将由TreeNode结点构成的双向链表转换为红黑树（双向链表与红黑树共同存在于同一个结构）
+    3. 将红黑树放入table对应的下标处，并将红黑树的root结点移动到双向链表的头结点
+    4. 现在，table中该下标位置，即使红黑树、又是双向链表
+
+### resize操作
+
+该操作在需要的时候对table进行扩容，并将元素放入新的table对应的位置处。
+
+1. 如果table未初始化，则对table初始化
+2. 否则，如果还未达到上限，将创建一个长度是原table数组长度2倍的新的数组
+3. 将原table中的元素移动到新table的相应下标处，具体如下(假设在处理原数组下标为j的元素)
+    1. 如果j处只有一个元素，则结算该元素在新数组中的位置，并将它放到该位置； 否则
+    2. 如果该元素是TreeNode类型
+        1. 将该红黑树拆解为两个由TreeNode组成的链表：高位链表（在新数组下标较大的后半部分）、低位链表（在新数组下标较小的前半部分）
+        2. 如果链表长度不大于UNTREEIFY_THRESHOLD（6），则将TreeNode类型的链表转换为Node类型的链表，并放入table相应的下标处；否则
+        3. 做与链表转红黑树中相同的操作
+        
+        ；否则
+    3. 是链表类型，将该链表拆解为两个高位、低位链表，并将这两个链表放入table相应的下标处
+
+### get操作
+
+该操作返回key关联的value值；如果key不存在，返回null。
+
+1. 计算key的hash值，根据hash值计算key在table数组中的位置
+    * 如果该位置不为null，则比较key和其hash值是否相等
+        * 如果相等，则返回该结点
+        * 否则
+            * 如果结点是红黑树，则从红黑树中查找该key对应的结点
+            * 否则，就是从链表中查找该key对应的结点
+    * 否则，返回null
+
+2. 根据1获取结点的value值，或者返回null
+
+### remove操作
+
+该操作删除key，返回key关联的value；如果key不存在，返回null。
+
+1. 查找key对应的结点
+2. 从链表或者红黑树删除该结点
+3. 返回结点的value值，或者返回null
