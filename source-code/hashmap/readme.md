@@ -553,7 +553,7 @@
     1. 使用链表结点的key、value构造TreeNode结点，并使用这些TreeNode结点构造一个双向链表（TreeNode具有双向链表的性质）
     2. 将由TreeNode结点构成的双向链表转换为红黑树（双向链表与红黑树共同存在于同一个结构）
     3. 将红黑树放入table对应的下标处，并将红黑树的root结点移动到双向链表的头结点
-    4. 现在，table中该下标位置，即使红黑树、又是双向链表
+    4. 现在，table中该下标位置，即是红黑树、又是双向链表
 
 ### resize操作
 
@@ -566,7 +566,7 @@
     2. 如果该元素是TreeNode类型
         1. 将该红黑树拆解为两个由TreeNode组成的链表：高位链表（在新数组下标较大的后半部分）、低位链表（在新数组下标较小的前半部分）
         2. 如果链表长度不大于UNTREEIFY_THRESHOLD（6），则将TreeNode类型的链表转换为Node类型的链表，并放入table相应的下标处；否则
-        3. 做与链表转红黑树中相同的操作
+        3. 将链表结构转换为红黑树结构
         
         ；否则
     3. 是链表类型，将该链表拆解为两个高位、低位链表，并将这两个链表放入table相应的下标处
@@ -592,3 +592,32 @@
 1. 查找key对应的结点
 2. 从链表或者红黑树删除该结点
 3. 返回结点的value值，或者返回null
+
+### 问题
+
+1. 什么情况下会进行扩容？
+    1. size属性 > 数组容量 * 加载因子时
+    2. 为解决hash冲突而形成的链表长度 >= TREEIFY_THRESHOLD（8），但是table数组长度 <= MIN_TREEIFY_CAPACITY（64）时
+
+2. 什么情况下会进行转红黑树操作？
+    1. 为解决hash冲突而形成的链表长度 >= TREEIFY_THRESHOLD（8），并且table数组长度 > MIN_TREEIFY_CAPACITY（64）时
+    2. 在扩容时，如果从原红黑树拆解出的新的链表长度 >= TREEIFY_THRESHOLD（8）
+    
+3. 为什么是非线程安全的？
+    
+    为了性能。在多线程环境下，请使用ConcurrentHashMap
+
+4. 如果多线程写HashMap实例，会有什么问题？
+    1. 多线程put（不考虑resize）
+        如果hash冲突，后一个线程覆盖前一个线程的key-value，如在一系列线程中出现hash冲突的键值对个数为N，则最多可能丢失N-1个键值对，即只有一个线程的键值对最终被加入到table内的链表或红黑树中
+    2. 多线程resize
+            A线程
+        oldTab = table;
+        table = newTab;     B线程
+                        oldTab = table;
+                        table = newTab;
+       在这种情况下，A线程还未将oldTab中的元素放入中table；此时B线程就拿到了该table，并创建新的数组，而table中还没有任何元素。
+       这是就丢失了全部元素。               
+                        
+
+    
