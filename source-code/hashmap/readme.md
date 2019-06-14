@@ -400,7 +400,17 @@
 
 ## get操作
 
-返回key关联的value值；如果key不存在，返回null
+返回key关联的value值；如果key不存在，返回null。
+
+1. 计算key的hash值，根据hash值计算key在table数组中的位置
+* 如果该位置不为null，则比较key和其hash值是否相等
+    * 如果相等，则返回该结点
+    * 否则
+        * 如果结点是红黑树，则从红黑树中查找该key对应的结点
+        * 否则，就是从链表中查找该key对应的结点
+* 否则，返回null
+
+2. 根据1获取结点的value值，或者返回null
 
 ```java
     /**
@@ -417,11 +427,13 @@
     final Node<K,V> getNode(int hash, Object key) {
         Node<K,V>[] tab; Node<K,V> first, e; int n; K k;
         if ((tab = table) != null && (n = tab.length) > 0 &&
-            (first = tab[(n - 1) & hash]) != null) {
+            (first = tab[(n - 1) & hash]) != null) {// idx处不为null
+            
+            // idx处的第一个结点
             if (first.hash == hash && // always check first node
                 ((k = first.key) == key || (key != null && key.equals(k))))
                 return first;
-            if ((e = first.next) != null) {
+            if ((e = first.next) != null) { // 下一结点不为空，链表或者红黑树
                 if (first instanceof TreeNode)
                     return ((TreeNode<K,V>)first).getTreeNode(hash, key);
                 do {
@@ -438,6 +450,9 @@
 ## remove操作
 
 删除key，返回key关联的value；如果key不存在，返回null
+
+1. 查找key对应的结点
+2. 从链表或者红黑树删除该结点
 
 ```java
     /**
@@ -493,3 +508,5 @@
         return null;
     }
 ```
+
+## 总结
