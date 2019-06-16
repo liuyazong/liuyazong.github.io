@@ -611,21 +611,30 @@
     1. 多线程put（不考虑resize）
         如果hash冲突，后一个线程覆盖前一个线程的key-value，如在一系列线程中出现hash冲突的键值对个数为N，则最多可能丢失N-1个键值对，即只有一个线程的键值对最终被加入到table内的链表或红黑树中
     2. 多线程resize
-
+    
+        A、B线程执行顺序如下
+    
         A线程
             
-        oldTab = table;
-
-        table = newTab;     
+        1. oldTab = table; // 赋值旧数组的引用
+        
+        2. Node<K,V>[] newTab = (Node<K,V>[])new Node[newCap]; // 创建扩容后的数组
+        
+        3. table = newTab; // 将新数组赋值给旧数组
+        
+        4. 将oldTab中的全部元素放入newTab // A线程还未执行到这里 
         
         B线程
         
-        oldTab = table;
-
-        table = newTab;
-
-       在这种情况下，A线程还未将oldTab中的元素放入中table；此时B线程就拿到了该table，并创建新的数组，而table中还没有任何元素。
-       这是就丢失了全部元素。               
-                        
-
+        1. oldTab = table; // B线程拿到的table实际上是A线程刚创建的没有任何元素的newTab
+        
+        2. Node<K,V>[] newTab = (Node<K,V>[])new Node[newCap]; // 创建扩容后的数组
+        
+        3. table = newTab; // 将新数组赋值给旧数组，这里会覆盖掉A线程创建的newTable
+        
+        4. 将oldTab中的全部元素放入newTab // B线程先于A线程执行完这一步骤，oldTab中没有任何元素，所以newTab中也不会有任何元素，即table中也不会有任何元素。这样，元素就全部丢失了
+        
+       以上是全部丢失的情况，如果在A线程执行步骤4的过程中，B线程开始执行上述逻辑，那么有可能不会丢失全部元素，而是丢失A线程还未放入newTable的部分元素。    
+    
+    3. 多线程remove
     
