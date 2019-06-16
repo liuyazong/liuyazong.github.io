@@ -612,15 +612,17 @@
         如果hash冲突，后一个线程覆盖前一个线程的key-value，如在一系列线程中出现hash冲突的键值对个数为N，则最多可能丢失N-1个键值对，即只有一个线程的键值对最终被加入到table内的链表或红黑树中
     2. 多线程resize
 
-            A线程
-
+        A线程
+            
         oldTab = table;
 
-        table = newTab;     B线程
+        table = newTab;     
+        
+        B线程
+        
+        oldTab = table;
 
-                        oldTab = table;
-
-                        table = newTab;
+        table = newTab;
 
        在这种情况下，A线程还未将oldTab中的元素放入中table；此时B线程就拿到了该table，并创建新的数组，而table中还没有任何元素。
        这是就丢失了全部元素。               
