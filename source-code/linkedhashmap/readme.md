@@ -500,6 +500,10 @@ public class LruCache<K, V> extends LinkedHashMap<K, V> {
     private int maxKeyCount;
     private static final int INITIAL_CAPACITY = 16;
     private static final float LOAD_FACTOR = 0.75F;
+
+    /**
+     * 只有当accessOrder为true时，才具有LRU的特性；否则，只维护写入顺序
+     */
     private static final boolean ACCESS_ORDER = true;
 
     public LruCache(Integer maxKeyCount) {
