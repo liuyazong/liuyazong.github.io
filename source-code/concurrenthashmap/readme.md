@@ -31,7 +31,7 @@
                              new Node<K,V>(hash, key, value, null)))
                     break;                   // no lock when adding to empty bin
             }
-            else if ((fh = f.hash) == MOVED)// f已在前一个else if分支被赋值，它是ForwardingNode结点，表示该结点正在resize
+            else if ((fh = f.hash) == MOVED)// f已在前一个else if分支被赋值，如果它是ForwardingNode结点，表示该idx处的结点正在resize
                 tab = helpTransfer(tab, f); // 使当前线程帮助做resize
             else { // 将key-value插入到table的idx处的链表或红黑树中
                 V oldVal = null;
@@ -162,6 +162,29 @@
 
 ```java
     /**
+     * Helps transfer if a resize is in progress.
+     */
+    final Node<K,V>[] helpTransfer(Node<K,V>[] tab, Node<K,V> f) {
+        Node<K,V>[] nextTab; int sc;
+        if (tab != null && (f instanceof ForwardingNode) &&
+            (nextTab = ((ForwardingNode<K,V>)f).nextTable) != null) {
+            int rs = resizeStamp(tab.length);
+            while (nextTab == nextTable && table == tab &&
+                   (sc = sizeCtl) < 0) {
+                if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 ||
+                    sc == rs + MAX_RESIZERS || transferIndex <= 0)
+                    break;
+                if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1)) {
+                    transfer(tab, nextTab);// 当前线程调用transfer进行resize
+                    break;
+                }
+            }
+            return nextTab;
+        }
+        return table;
+    }
+
+    /**
      * Tries to presize table to accommodate the given number of elements.
      *
      * @param size number of elements (doesn't need to be perfectly accurate)
@@ -189,7 +212,7 @@
             }
             else if (c <= sc || n >= MAXIMUM_CAPACITY) // 达到最大，不再扩容
                 break;
-            else if (tab == table) { // 
+            else if (tab == table) { // 表示table没有被替换，即没有进行resize，触发扩容操作
                 int rs = resizeStamp(n);
                 if (sc < 0) {
                     Node<K,V>[] nt;
@@ -208,6 +231,7 @@
     }
 
     /**
+     * 将已有结点移动到新创建的table中
      * Moves and/or copies the nodes in each bin to new table. See
      * above for explanation.
      */
@@ -228,7 +252,7 @@
             transferIndex = n;
         }
         int nextn = nextTab.length;
-        ForwardingNode<K,V> fwd = new ForwardingNode<K,V>(nextTab);
+        ForwardingNode<K,V> fwd = new ForwardingNode<K,V>(nextTab);// 创建ForwardingNode结点，其内部保存了nextTab的引用
         boolean advance = true;
         boolean finishing = false; // to ensure sweep before committing nextTab
         for (int i = 0, bound = 0;;) {
@@ -252,7 +276,7 @@
             }
             if (i < 0 || i >= n || i + n >= nextn) {
                 int sc;
-                if (finishing) {
+                if (finishing) {// 完成resize，将nextTab赋值给table
                     nextTable = null;
                     table = nextTab;
                     sizeCtl = (n << 1) - (n >>> 1);
@@ -265,15 +289,17 @@
                     i = n; // recheck before commit
                 }
             }
-            else if ((f = tabAt(tab, i)) == null)
-                advance = casTabAt(tab, i, null, fwd);
-            else if ((fh = f.hash) == MOVED)
-                advance = true; // already processed
+            else if ((f = tabAt(tab, i)) == null)// 如果i位置为null，则使用CAS将i位置设置为fwd，其它线程发现该位置为ForwardingNode结点（其hash值为MOVED）就知道i处的结点正在做resize，则跳过这个位置去resize其它位置
+                advance = casTabAt(tab, i, null, fwd);// 如果CAS成功，advance为true，
+            else if ((fh = f.hash) == MOVED)// 
+                advance = true; // already processed// ForwardingNode结点，已经resize，跳过
             else {
-                synchronized (f) {
-                    if (tabAt(tab, i) == f) {
+                synchronized (f) { // f已在前面的else if分支被赋值，执行到这里说明它不是ForwardingNode结点，则该线程如果获取锁成功，则可以对f代表的链表或红黑树进行resize操作
+                            // 线程能执行到这里，说明i的位置原本就有值，所有需要锁定该位置，然后进行rehash；最终还是会把i的位置设置为ForwardingNode类型，告知其它线程该位置已经被处理过
+                    if (tabAt(tab, i) == f) {// 确保i位置的元素真的是f，即确保i位置没有被resize过，因为后面会为i位置设置新值
                         Node<K,V> ln, hn;
-                        if (fh >= 0) {
+                        if (fh >= 0) { // 正常Node结点的hash是>=0的
+                            // 以下处理链表的resize，将原链表拆解为高位链表、低位链表
                             int runBit = fh & n;
                             Node<K,V> lastRun = f;
                             for (Node<K,V> p = f.next; p != null; p = p.next) {
@@ -298,16 +324,20 @@
                                 else
                                     hn = new Node<K,V>(ph, pk, pv, hn);
                             }
+                            // 使用CAS分别将拆解出来的两个链表放到nextTab中。
+                            // 同时将fwd结点放入table中，这样，在其它线程put时，发现该结点是ForwardingNode结点，表示正在进行resize，这个线程调用helpTransfer方法帮助resize；并且其它线程在resize时，也会跳过该位置
                             setTabAt(nextTab, i, ln);
                             setTabAt(nextTab, i + n, hn);
                             setTabAt(tab, i, fwd);
                             advance = true;
                         }
-                        else if (f instanceof TreeBin) {
+                        else if (f instanceof TreeBin) {// TreeBin的hash值是TREEBIN
                             TreeBin<K,V> t = (TreeBin<K,V>)f;
                             TreeNode<K,V> lo = null, loTail = null;
                             TreeNode<K,V> hi = null, hiTail = null;
                             int lc = 0, hc = 0;
+                            
+                            // 同样将红黑树拆解为高位链表、低位链表
                             for (Node<K,V> e = t.first; e != null; e = e.next) {
                                 int h = e.hash;
                                 TreeNode<K,V> p = new TreeNode<K,V>
@@ -329,10 +359,15 @@
                                     ++hc;
                                 }
                             }
+                            
+                            // 如果需要，将链表构造为红黑树
                             ln = (lc <= UNTREEIFY_THRESHOLD) ? untreeify(lo) :
                                 (hc != 0) ? new TreeBin<K,V>(lo) : t;
                             hn = (hc <= UNTREEIFY_THRESHOLD) ? untreeify(hi) :
                                 (lc != 0) ? new TreeBin<K,V>(hi) : t;
+                            
+                            // 使用CAS将红黑树放入nextTable。
+                            // 同时将fwd放入table中，这样，在其它线程put时，发现该结点是ForwardingNode结点，表示正在进行resize，这个线程调用helpTransfer方法帮助resize；并且其它线程在resize时，也会跳过该位置
                             setTabAt(nextTab, i, ln);
                             setTabAt(nextTab, i + n, hn);
                             setTabAt(tab, i, fwd);
