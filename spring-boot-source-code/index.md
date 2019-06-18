@@ -1,12 +1,3 @@
----
-layout: post
-title: Spring Boot启动流程
-date: 2019-01-15
-author: yz
-tags: Spring Boot, Spring
-categories: Spring Boot, Spring
----
-
 文章主要从以下三个方面来分析Spring Boot项目的启动流程
 0. SpringApplication的创建及run方法执行
 1. 配置的读取，如application.yml/application.properties等
