@@ -80,6 +80,8 @@
                 }
             }
         }
+        
+        // 这个方法内部也会判断是否需要进行扩容
         addCount(1L, binCount);
         return null;
     }
