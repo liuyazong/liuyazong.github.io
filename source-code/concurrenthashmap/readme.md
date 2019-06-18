@@ -1,5 +1,143 @@
 # ConcurrentHashMap
 
+同HashMap一样，主要看put、get、remove、resize操作，不看红黑树的结点插入、删除、查找等操作。
+
+首先，以注释源码的方式，看看各个功能的实现；然后，以文字上描述的方式，总结各个功能的实现过程。
+
+## 内部属性
+
+静态属性
+
+```java
+    /**
+     * 最大容量
+     */
+    private static final int MAXIMUM_CAPACITY = 1 << 30;
+
+    /**
+     * 默认初始容量
+     */
+    private static final int DEFAULT_CAPACITY = 16;
+    
+    /**
+     * 加载因子，当size达到容量*LOAD_FACTOR时，需要进行扩容
+     */
+    private static final float LOAD_FACTOR = 0.75f;
+
+
+    /**
+     * 链表达到该长度时可能需要转换为红黑树或者进行扩容
+     */
+    static final int TREEIFY_THRESHOLD = 8;
+
+    /**
+     * 红黑树结点数量不大于该值时，需要将红黑树转为链表
+     */
+    static final int UNTREEIFY_THRESHOLD = 6;
+
+    /**
+     * 只有容量大于该值时并且链表长度达到TREEIFY_THRESHOLD时，才需要将链表转换红黑树；否则，进行扩容
+     */
+    static final int MIN_TREEIFY_CAPACITY = 64;
+    
+    /**
+     * Encodings for Node hash fields. See above for explanation.
+     */
+    static final int MOVED     = -1; // ForwardingNode的hash值
+    static final int TREEBIN   = -2; // TreeBin的hash值
+    static final int RESERVED  = -3; // ReservationNode的hash值
+    static final int HASH_BITS = 0x7fffffff; // 用于普通结点Node
+```
+
+实例属性
+
+```java
+    /**
+     * 内部用于存放key-value的数组
+     */
+    transient volatile Node<K,V>[] table;
+
+    /**
+     * 用于辅助resize的临时数组
+     */
+    private transient volatile Node<K,V>[] nextTable;
+
+    /**
+     * 0：默认值
+     * -1：表示正在对table进行初始化操作
+     * -(1+resize线程数量)：在进行resize
+     * 其它值：初始化时的数组容量。在初始化后，保存下一次扩容时需要的数组的容量
+     */
+    private transient volatile int sizeCtl;
+
+    /**
+     * 正在转移结点的数组下标，从大往小递减
+     */
+    private transient volatile int transferIndex;
+
+```
+
+## 结点结构
+
+```java
+    /**
+     * 基本结点，定义了find方法，后面子类重写该find方法进行相应的查找操作
+     */  
+    static class Node<K,V> implements Map.Entry<K,V> {
+        final int hash;
+        final K key;
+        volatile V val;
+        volatile Node<K,V> next;
+        // ...
+    }
+    
+    /**
+     * 临时结点，transfer时使用，hash为MOVED
+     */ 
+    static final class ForwardingNode<K,V> extends Node<K,V> {
+        final Node<K,V>[] nextTable;
+        ForwardingNode(Node<K,V>[] tab) {
+            super(MOVED, null, null, null);
+            this.nextTable = tab;
+        }
+        // ...
+    }
+    
+    /**
+     * 红黑树结点
+     */ 
+    static final class TreeNode<K,V> extends Node<K,V> {
+        TreeNode<K,V> parent;  // red-black tree links
+        TreeNode<K,V> left;
+        TreeNode<K,V> right;
+        TreeNode<K,V> prev;    // needed to unlink next upon deletion
+        boolean red;
+        // ...
+    }
+
+    /**
+     * 红黑树，hash为TREEBIN
+     */             
+    static final class TreeBin<K,V> extends Node<K,V> {
+        TreeNode<K,V> root;
+        volatile TreeNode<K,V> first;
+        volatile Thread waiter;
+        volatile int lockState;
+        // values for lockState
+        static final int WRITER = 1; // set while holding write lock
+        static final int WAITER = 2; // set when waiting for write lock
+        static final int READER = 4; // increment value for setting read lock
+        // ...
+        TreeBin(TreeNode<K,V> b) {
+            super(TREEBIN, null, null, null);
+            
+        }
+        // ...
+    }    
+    
+    
+```
+
 ## put操作
 
 ```java
@@ -88,7 +226,7 @@
 ```
 ### initTable方法
 
-对table进行初始化，借助变量sizeCtl和CAS来实现多线程状态下的安全操作。
+对table进行初始化，借助变量sizeCtl和循环CAS来实现多线程状态下的安全初始化。
 
 ```java
     /**
@@ -162,6 +300,8 @@
 
 ## resize操作
 
+将结点从table转移到扩容后的table中。
+
 ```java
     /**
      * Helps transfer if a resize is in progress.
@@ -177,7 +317,7 @@
                     sc == rs + MAX_RESIZERS || transferIndex <= 0)
                     break;
                 if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1)) {
-                    transfer(tab, nextTab);// 当前线程调用transfer进行resize
+                    transfer(tab, nextTab);// 当前线程调用transfer进行结点的转移
                     break;
                 }
             }
@@ -278,7 +418,7 @@
             }
             if (i < 0 || i >= n || i + n >= nextn) {
                 int sc;
-                if (finishing) {// 完成resize，将nextTab赋值给table
+                if (finishing) {// 完成resize，将nextTab赋值给table，并将nextTable置为null
                     nextTable = null;
                     table = nextTab;
                     sizeCtl = (n << 1) - (n >>> 1);
@@ -384,6 +524,187 @@
 
 ## get操作
 
+```java
+    public V get(Object key) {
+        Node<K,V>[] tab; Node<K,V> e, p; int n, eh; K ek;
+        int h = spread(key.hashCode());
+        if ((tab = table) != null && (n = tab.length) > 0 &&
+            (e = tabAt(tab, (n - 1) & h)) != null) {
+            if ((eh = e.hash) == h) {
+                if ((ek = e.key) == key || (ek != null && key.equals(ek)))
+                    return e.val;
+            }
+            else if (eh < 0) // eh < 0 表示该结点是 ForwardingNode或者TreeBin类型的结点
+                return (p = e.find(h, key)) != null ? p.val : null;
+            while ((e = e.next) != null) { // 普通Node类型的结点，即e是链表
+                if (e.hash == h &&
+                    ((ek = e.key) == key || (ek != null && key.equals(ek))))
+                    return e.val;
+            }
+        }
+        return null;
+    }
+```
+
 ## remove操作
 
+```java
+    /**
+     * {@inheritDoc}
+     *
+     * @throws NullPointerException if the specified key is null
+     */
+    public boolean remove(Object key, Object value) {
+        if (key == null)
+            throw new NullPointerException();
+        return value != null && replaceNode(key, null, value) != null;
+    }
+
+    /**
+     * Removes the key (and its corresponding value) from this map.
+     * This method does nothing if the key is not in the map.
+     *
+     * @param  key the key that needs to be removed
+     * @return the previous value associated with {@code key}, or
+     *         {@code null} if there was no mapping for {@code key}
+     * @throws NullPointerException if the specified key is null
+     */
+    public V remove(Object key) {
+        return replaceNode(key, null, null);
+    }
+
+    /**
+     * Implementation for the four public remove/replace methods:
+     * Replaces node value with v, conditional upon match of cv if
+     * non-null.  If resulting value is null, delete.
+     */
+    final V replaceNode(Object key, V value, Object cv) {
+        int hash = spread(key.hashCode());
+        for (Node<K,V>[] tab = table;;) {
+            Node<K,V> f; int n, i, fh;
+            if (tab == null || (n = tab.length) == 0 ||
+                (f = tabAt(tab, i = (n - 1) & hash)) == null) // 如果i 处为null，表示这个key不存在，结束循环
+                break;
+            else if ((fh = f.hash) == MOVED) // 表示i处是一个ForwardingNode类型结点，正在进行transfer，使当前线程帮助完成transfer
+                tab = helpTransfer(tab, f);
+            else {
+                V oldVal = null;
+                boolean validated = false;
+                synchronized (f) { // 获取锁
+                    if (tabAt(tab, i) == f) { // 校验i处结点是否真的是f，因为多线程循环情况下，i 处可能已被其它线程更新
+                        if (fh >= 0) { // 正常结点，即链表，前面有synchronized，不用担心并发问题，找到key并将其从链表删除即可
+                            validated = true;
+                            for (Node<K,V> e = f, pred = null;;) {
+                                K ek;
+                                if (e.hash == hash &&
+                                    ((ek = e.key) == key ||
+                                     (ek != null && key.equals(ek)))) {
+                                    V ev = e.val;
+                                    if (cv == null || cv == ev ||
+                                        (ev != null && cv.equals(ev))) {
+                                        oldVal = ev;
+                                        if (value != null)
+                                            e.val = value;
+                                        else if (pred != null)
+                                            pred.next = e.next;
+                                        else
+                                            setTabAt(tab, i, e.next);
+                                    }
+                                    break;
+                                }
+                                pred = e;
+                                if ((e = e.next) == null)
+                                    break;
+                            }
+                        }
+                        else if (f instanceof TreeBin) { // 红黑树，前面有synchronized，不用担心并发问题，找到该key并将其从红黑树删除即可
+                            validated = true;
+                            TreeBin<K,V> t = (TreeBin<K,V>)f;
+                            TreeNode<K,V> r, p;
+                            if ((r = t.root) != null &&
+                                (p = r.findTreeNode(hash, key, null)) != null) {
+                                V pv = p.val;
+                                if (cv == null || cv == pv ||
+                                    (pv != null && cv.equals(pv))) {
+                                    oldVal = pv;
+                                    if (value != null)
+                                        p.val = value;
+                                    else if (t.removeTreeNode(p))
+                                        setTabAt(tab, i, untreeify(t.first));
+                                }
+                            }
+                        }
+                    }
+                }
+                if (validated) {
+                    if (oldVal != null) {
+                        if (value == null)
+                            
+                            // 同put时的addCount
+                            addCount(-1L, -1);
+                        return oldVal;
+                    }
+                    break;
+                }
+            }
+        }
+        return null;
+    }
+```
+
 ## 总结
+
+文章分别对put、resize、get、remove操作的部分源码进行了注释。
+
+从它的源码可以看出，ConcurrentHashMap保证线程安全的核心是循环CAS和synchronized。
+
+### put操作
+
+1. 首先put操作进入一个for循环
+2. 如果table还未创建，则使用循环CAS的方式进行table数组的创建，返回新创建的table的引用。否则
+3. 计算处key在table数组中的位置（记为idx），如果idx处为null，则将当前key-value构造为一个Node实例，然后使用CAS将该实例放到idx处
+    1. 如果CAS成功，则结束循环；否则
+    2. 继续循环
+4. 否则，如果idx处结点的hash值为MOVED，表明正在进行resize，则使当前线程去帮助resize（resize也是一个循环CAS，直到成功，才会回到put的循环）
+5. 否则，使用synchronized锁定idx处的结点，然后将当前key-value放入到idx处的结点代表的链表或红黑树中
+6. 如果需要，调用treeifyBin方法进行扩容（resize，循环CAS）或者将idx处的链表转换为红黑树（synchronized） 
+7. （循环已结束）调用addCount方法，如果需要，进行resize
+     
+### resize操作
+
+resize操作的核心代码是transfer方法，它将结点从table中转移到nextTable中，转移完成后使用nextTable覆盖table。
+
+也是在一个for循环中
+
+1. 如果idx处为null，则使用CAS将新创建的ForwardingNode结点放到idx处，ForwardingNode结点保存nextTable的引用
+2. 如果idx处不为null
+    1. 如果该结点的hash值为MOVED，表示该处已经被处理，跳过；否则
+    2. 是用synchronized锁定该结点，然后将table中的元素构造为高低位结点（该转链表的转链表、该转红黑树的转红黑树），使用CAS放入nextTable中
+    3. 然后使用CAS将上面创建的ForwardingNode结点放到table的idx处
+    
+### get操作
+
+需要注意的是，get操作并不是单纯的从table中查找。
+
+假设key对应的索引为idx
+
+1. 如果idx处正是要查找的key，则返回其对应的value；否则
+2. 如果idx处的结点hash值小于0，即这个结点可能是ForwardingNode结点或者TreeBin结点，无论这两者是哪个，都实现了各自的find方法
+    1. 如果是ForwardingNode结点，则查找实际是从nextTable中查找的，如果查到，直接返回对应的value；
+3. 否则（idx >=0 ），则继续从idx处的链表中查找，找到返回其对应的value，或者未找到返回null。
+
+### remove操作
+
+首先进入一个for循环中
+
+1. 如果idx处为null，表示这个key不存在，结束循环，返回null
+2. 否则，如果idx处结点的hash值为MOVED，和put一样，这里也是一个helpTransfer的操作
+3. 否则，首先获取idx处结点的锁，如果获取到，这直接从该链表或红黑树中删除该key对应的结点。如果需要，也会做红黑树与链表之间的转换操作。
+
+### 循环(CAS + synchronized)
+
+put中是 循环(CAS + synchronized)
+
+resize中也是 循环(CAS + synchronized)
+
+remove中还是 循环(CAS + synchronized)
