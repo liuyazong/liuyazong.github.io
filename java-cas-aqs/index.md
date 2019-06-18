@@ -1,11 +1,4 @@
----
-layout: post
-title: CAS & AQS
-date: 2019-01-04
-author: yz
-tags: java, CAS, AQS
-categories: java, CAS, AQS
----
+# CAS与AQS
 
 本文介绍两方面的知识：
 * CAS: compare and swap
