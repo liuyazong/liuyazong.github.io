@@ -1,3 +1,5 @@
+# Spring Boot项目的启动流程
+
 文章主要从以下三个方面来分析Spring Boot项目的启动流程
 0. SpringApplication的创建及run方法执行
 1. 配置的读取，如application.yml/application.properties等
@@ -23,9 +25,9 @@ public class MainApp {
 }
 ```
 
-# SpringApplication
+## SpringApplication
 
-## 自动配置
+### 自动配置
 
 @SpringBootApplication
 
@@ -141,7 +143,7 @@ AutoConfigurationImportSelector类的selectImports方法从spring.factories文�
 
 @ComponentScan、@ComponentScans。
 
-## SpringApplication构造器
+### SpringApplication构造器
 
 ```java
 public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
@@ -164,7 +166,7 @@ public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySourc
 }
 ```
 
-### ApplicationContextInitializer
+#### ApplicationContextInitializer
 
 使用SpringFactoriesLoader从spring.factories中加载的ApplicationContextInitializer实例有以下这些。
 
@@ -187,7 +189,7 @@ org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLoggingL
 
 在ConfigurableApplicationContext的refresh方法被调用之前，用于初始化ConfigurableApplicationContext实例的回调接口，这些ApplicationContextInitializer在ConfigurableApplicationContext实例被创建之后执行。
 
-### ApplicationListener
+#### ApplicationListener
 
 使用SpringFactoriesLoader从spring.factories中加载的ApplicationListener实例有以下这些。
 
@@ -218,7 +220,7 @@ org.springframework.boot.autoconfigure.BackgroundPreinitializer
 
 **可以自己实现ApplicationContextInitializer、ApplicationListener并将其配置到spring.factories文件中来实现对Spring Boot应用的定制。**
 
-## run方法
+### run方法
 
 这个run方法直指SpringApplication实例的的(String... args)方法。
 
@@ -304,7 +306,7 @@ public ConfigurableApplicationContext run(String... args) {
 * callRunners(context, applicationArguments);
 * listeners.running(context);
 
-### SpringApplicationRunListeners listeners = getRunListeners(args);
+#### SpringApplicationRunListeners listeners = getRunListeners(args);
 
 从spring.factories中加载并实例化接口SpringApplicationRunListener的实现类，如下
 
@@ -339,7 +341,7 @@ public EventPublishingRunListener(SpringApplication application, String[] args) 
 
 **可以自己实现SpringApplicationRunListener并将其配置到spring.factories中来实现对SpringApplication的run方法的监听。**
 
-### ConfigurableEnvironment environment = prepareEnvironment(listeners, applicationArguments);
+#### ConfigurableEnvironment environment = prepareEnvironment(listeners, applicationArguments);
 
 // TODO
 
@@ -449,7 +451,7 @@ Loader类实现了配置文件的加载。
 
     它将配置文件封装为PropertySource并添加到当前Environment实例的propertySources中。
 
-### context = createApplicationContext();
+#### context = createApplicationContext();
 
 这里创建了ApplicationContext实例，其实是AnnotationConfigApplicationContext的实例。
 AnnotationConfigApplicationContext的无参构造器及其父类GenericApplicationContext的无参构造器
@@ -489,7 +491,7 @@ AutowiredAnnotationBeanPostProcessor、CommonAnnotationBeanPostProcessor是BeanP
 
 后面refresh时会用到这几个类。
 
-### prepareContext(context, environment, listeners, applicationArguments, printedBanner);
+#### prepareContext(context, environment, listeners, applicationArguments, printedBanner);
 
 ```java
 private void prepareContext(ConfigurableApplicationContext context,
@@ -535,27 +537,27 @@ private void prepareContext(ConfigurableApplicationContext context,
 后面的事件发布都是用AbstractApplicationContext#applicationEventMulticaster来进行。
 实际上，这两个属性是SimpleApplicationEventMulticaster的不同实例。
 
-### refreshContext(context);
+#### refreshContext(context);
 
 调用了`((AbstractApplicationContext) applicationContext).refresh();`，后面再说这个。
 
-### afterRefresh(context, applicationArguments);
+#### afterRefresh(context, applicationArguments);
 
 这个方法没有做任何事情，子类可以重写该方法。
 
-### listeners.started(context);
+#### listeners.started(context);
 
 发布ApplicationStartedEvent事件
 
-### callRunners(context, applicationArguments);
+#### callRunners(context, applicationArguments);
 
 在ApplicationStarted之后，调用ApplicationRunner、CommandLineRunner的run方法，用户可以自己实现这两个接口来做一些事情。
 
-### listeners.running(context);
+#### listeners.running(context);
 
 发布ApplicationReadyEvent事件
 
-# AbstractApplicationContext
+## AbstractApplicationContext
 
 refresh方法是在AbstractApplicationContext中实现的。
 AnnotationConfigApplicationContext的继承体系，只列出了几个类，接口没有列出。
@@ -655,11 +657,11 @@ public void refresh() throws BeansException, IllegalStateException {
 }
 ```
 
-## postProcessBeanFactory(beanFactory);
+### postProcessBeanFactory(beanFactory);
 
 该方法在AbstractApplicationContext中并没有实现。
 
-## invokeBeanFactoryPostProcessors(beanFactory);
+### invokeBeanFactoryPostProcessors(beanFactory);
 
 到这个方法之前，context内一共有以下以三个BeanFactoryPostProcessor的实现；
 ConfigurationWarningsPostProcessor implements PriorityOrdered, BeanDefinitionRegistryPostProcessor 打印警告日志
@@ -935,7 +937,7 @@ public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
 }
 ```
 
-### ConfigurationClassParser#parse
+#### ConfigurationClassParser#parse
 
 ```java
 public void parse(Set<BeanDefinitionHolder> configCandidates) {
@@ -1106,7 +1108,7 @@ public @interface EnableAutoConfiguration {
 public @interface AutoConfigurationPackage {
 ```
 
-## finishBeanFactoryInitialization(beanFactory);
+### finishBeanFactoryInitialization(beanFactory);
 
 完成非@Lazy的创建
 
@@ -1273,7 +1275,7 @@ protected <T> T doGetBean(final String name, @Nullable final Class<T> requiredTy
 }
 ```
 
-### 获取已创建的单例bean
+#### 获取已创建的单例bean
 
 Object sharedInstance = getSingleton(beanName); 
 
@@ -1305,7 +1307,7 @@ protected Object getSingleton(String beanName, boolean allowEarlyReference) {
 }
 ```
 
-### 创建单例bean
+#### 创建单例bean
 
 ```java
 sharedInstance = getSingleton(beanName, () -> {
@@ -1553,7 +1555,7 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 }
 ```
 
-### 循环依赖
+#### 循环依赖
 
 以两个互相依赖的单例bean ServiceA和ServiceB为例。
 
@@ -1586,7 +1588,7 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
         this.earlySingletonObjects.remove(a);
         this.registeredSingletons.add(a);    
 
-# 总结
+## 总结
 
 1. 
     @SpringBootApplication
