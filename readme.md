@@ -4,5 +4,5 @@
 4. [源码分析/LinkedHashMap源码分析](https://liuyazong.github.io/source-code/linkedhashmap)
 5. [源码分析/ConcurrentHashMap源码分析](https://liuyazong.github.io/source-code/concurrenthashmap)
 6. [源码分析/ThreadLocal源码分析](https://liuyazong.github.io/source-code/threadlocal)
-7. [源码分析/线程与线程池源码分析](https://liuyazong.github.io/source-code/thread-pool)
+7. [源码分析/线程与线程池源码分析](https://liuyazong.github.io/source-code/threadpool)
 8. [源码分析/SpringBoot启动流程源码分析](https://liuyazong.github.io/spring-boot-source-code)
