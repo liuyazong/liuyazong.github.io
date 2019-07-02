@@ -15,6 +15,7 @@
         <module>spring-boot-source-code</module>
         <module>spring-boot-extension-point</module>
         <module>source-code</module>
+        <module>sorted-array-merge</module>
     </modules>
 
     <!--<parent>

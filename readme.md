@@ -13,3 +13,5 @@
 0. [RabbitMQ实战](https://liuyazong.github.io/mq-app/)
 0. [Zookeeper Api及应用](https://liuyazong.github.io/zk-curator/)
 0. [分布式一致性算法](https://liuyazong.github.io/zk-curator/分布式一致性算法)
+0. [IP与整形值互相转换](https://liuyazong.github.io/IP与整形值互相转换)
+0. [有序数列合并](https://liuyazong.github.io/sorted-array-merge)
