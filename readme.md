@@ -12,4 +12,3 @@
 0. [GRpc实战](https://liuyazong.github.io/grpc-in-action/)
 0. [RabbitMQ实战](https://liuyazong.github.io/mq-app/)
 0. [IP与整形值互相转换](https://liuyazong.github.io/IP与整形值互相转换)
-0. [有序数列合并](https://liuyazong.github.io/sorted-array-merge)
