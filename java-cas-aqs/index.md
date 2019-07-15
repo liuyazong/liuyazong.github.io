@@ -510,7 +510,7 @@ final boolean acquireQueued(final Node node, int arg) {
         boolean interrupted = false;
         for (;;) {
             final Node p = node.predecessor();
-            //如果当前结点的前驱结点是链表头节点，表示有资格获取锁，继续调用tryAcquire，如果tryAcquire方法返回了true，则获取到锁，返回false
+            //如果当前结点的前驱结点是链表头节点，表示有资格获取锁，继续调用tryAcquire，如果tryAcquire方法返回了true，则获取到锁；返回false，则未获取到锁，判断是否需要中断
             if (p == head && tryAcquire(arg)) {
                 setHead(node);
                 p.next = null; // help GC
@@ -529,6 +529,7 @@ final boolean acquireQueued(final Node node, int arg) {
 }
 
 /**
+ * 如果当前结点的waitStatus为Node.SIGNAL
  * Checks and updates status for a node that failed to acquire.
  * Returns true if thread should block. This is the main signal
  * control in all acquire loops.  Requires that pred == node.prev.
